@@ -1,0 +1,155 @@
+{
+  "products": [
+    {
+      "id": "oversized-240",
+      "name": "The Oversized Tee",
+      "fabric": "240 GSM Premium Cotton",
+      "image": "/images/oversized-lavender.png",
+      "images": [
+        "/images/oversized-lavender.png",
+        "/images/oversized-brown.png",
+        "/images/oversized-maroon.webp"
+      ],
+      "tagline": "Structured drape that holds its shape",
+      "description": "Heavyweight combed cotton with a boxy, intentional fall. Substantial enough to stand on its own, soft enough to live in all day.",
+      "details": [
+        "Bio-washed combed cotton",
+        "Ribbed collar, shoulder taped",
+        "Pre-shrunk, colour-locked"
+      ],
+      "colors": ["Lavender", "Coffee Brown", "Maroon"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "price": "₹799/-",
+      "badge": "Top Sale",
+      "featured": true,
+      "sortOrder": 1
+    },
+    {
+      "id": "regular-240",
+      "name": "The Regular Fit Tee",
+      "fabric": "240 GSM Premium Cotton",
+      "image": "/images/regular-white.webp",
+      "images": [
+        "/images/regular-white.webp",
+        "/images/regular-black.webp",
+        "/images/regular-brown.webp"
+      ],
+      "tagline": "The everyday standard, refined",
+      "description": "A clean, true-to-size cut for work, travel and everything between. Tailored through the body without ever feeling tight.",
+      "details": ["240 GSM single jersey", "Straight hem, no roll", "Holds shape past 40 washes"],
+      "colors": ["Black", "White", "Coffee Brown"],
+      "sizes": ["S", "M", "L", "XL", "XXL"],
+      "price": "₹699",
+      "badge": "Top Sale",
+      "featured": true,
+      "sortOrder": 2
+    },
+    {
+      "id": "terry-260",
+      "name": "The French Terry Oversized",
+      "fabric": "260 GSM French Terry",
+      "image": "/images/terry-beige.png",
+      "images": ["/images/terry-beige.png", "/images/terry-black.png", "/images/terry-white.png"],
+      "tagline": "Weight you can feel, softness you notice",
+      "description": "Loopback French terry with a quiet texture and a heavier hand. Our most comfortable piece, built for the whole day.",
+      "details": ["260 GSM loopback terry", "Dropped shoulder, relaxed body", "Brushed interior"],
+      "colors": ["Beige", "Black", "White"],
+      "sizes": ["S", "M", "L", "XL"],
+      "price": "₹949/-",
+      "badge": "Popular",
+      "featured": true,
+      "sortOrder": 3
+    },
+    {
+      "id": "terry-300",
+      "name": "The French Terry Oversized 300",
+      "fabric": "300 GSM French Terry",
+      "image": "/images/terry300-black.png",
+      "images": ["/images/terry300-black.png", "/images/terry300-white.png"],
+      "tagline": "Our heaviest hand, built to last",
+      "description": "A denser 300 GSM loopback terry with a sculpted, premium fall. The most substantial piece in the collection, and the one you'll reach for first.",
+      "details": [
+        "300 GSM loopback terry",
+        "Structured oversized silhouette",
+        "Reinforced neck and shoulders"
+      ],
+      "colors": ["Black", "White"],
+      "sizes": ["S", "M", "L", "XL"],
+      "price": "₹999/-",
+      "badge": "Popular",
+      "featured": true,
+      "sortOrder": 4
+    },
+    {
+      "id": "sun-faded-240",
+      "name": "The Sun-Faded Tee",
+      "fabric": "240 GSM Special Wash Cotton",
+      "image": "/images/sun-faded-green.png",
+      "images": [
+        "/images/sun-faded-green.png",
+        "/images/sun-faded-green-2.png",
+        "/images/sun-faded-grey-3.png",
+        "/images/sun-faded-grey-2.png"
+      ],
+      "tagline": "Faded like a favourite, from day one",
+      "description": "A special sun-fade wash on 240 GSM cotton that gives every piece a softened, lived-in tone. Broken in before it reaches you.",
+      "details": [
+        "240 GSM special wash cotton",
+        "Tonal sun-faded finish",
+        "Soft, worn-in hand feel"
+      ],
+      "colors": ["Olive Green", "Grey"],
+      "sizes": ["S", "M", "L", "XL"],
+      "price": "₹1,099/-",
+      "badge": "New",
+      "featured": true,
+      "sortOrder": 5
+    },
+    {
+      "id": "acid-wash",
+      "name": "The Lava-sprayed Acid Wash Oversized",
+      "fabric": "Premium Garment-Dyed Cotton",
+      "image": "/images/lava-black.png",
+      "images": ["/images/lava-black.png", "/images/lava-black-2.png", "/images/lava-grey.png"],
+      "tagline": "Character in every wash, no two alike",
+      "description": "A hand-finished acid wash on heavyweight cotton. Broken in from day one, with depth that keeps improving.",
+      "details": [
+        "Garment-dyed and hand washed",
+        "Unique tonal variation",
+        "Softened, worn-in feel"
+      ],
+      "colors": ["Black", "Light Grey"],
+      "sizes": ["S", "M", "L", "XL"],
+      "price": "₹1,199/-",
+      "badge": "New",
+      "featured": true,
+      "sortOrder": 6
+    }
+  ],
+  "collections": [
+    {
+      "id": "oversized",
+      "title": "Oversized",
+      "image": "/images/oversized-lavender.png",
+      "productId": "oversized-240",
+      "tint": "bg-[#f5e9a8]",
+      "sortOrder": 1
+    },
+    {
+      "id": "regular-fit",
+      "title": "Regular Fit",
+      "image": "/images/regular-white.webp",
+      "productId": "regular-240",
+      "tint": "bg-[#f7ecb0]",
+      "sortOrder": 2
+    },
+    {
+      "id": "french-terry",
+      "title": "French Terry",
+      "image": "/images/terry-beige.png",
+      "productId": "terry-260",
+      "tint": "bg-[#f3e6a0]",
+      "sortOrder": 3
+    }
+  ]
+}
