@@ -5,7 +5,7 @@ import { Reveal } from "@/components/Reveal";
 import { getProducts } from "@/lib/catalog.server";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export const metadata = buildPageMetadata({
   title: "Collection",

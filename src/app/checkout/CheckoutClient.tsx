@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ export default function CheckoutClient() {
   const mode = params.get("mode") === "buy_now" ? "buy_now" : "cart";
   const { customer, cart, openAuth, loading } = useCommerce();
   const { products } = useCatalog();
+  const { hasOffer, promoCode, discountInr } = useIstefadaOffer();
 
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
@@ -91,6 +93,8 @@ export default function CheckoutClient() {
   }, [mode, buyNow, products, cart]);
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  const discount = hasOffer ? Math.min(discountInr, subtotal) : 0;
+  const total = Math.max(0, subtotal - discount);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -104,6 +108,7 @@ export default function CheckoutClient() {
               mode,
               buyNow: mode === "buy_now" ? buyNow : undefined,
               alternatePhone,
+              promoCode: hasOffer ? promoCode : undefined,
               address: {
                 label,
                 line1,
@@ -119,6 +124,7 @@ export default function CheckoutClient() {
               buyNow: mode === "buy_now" ? buyNow : undefined,
               alternatePhone,
               addressId: selectedAddressId,
+              promoCode: hasOffer ? promoCode : undefined,
             };
 
       const res = await fetch("/api/orders", {
@@ -356,9 +362,15 @@ export default function CheckoutClient() {
               <span className="text-muted-foreground">Shipping</span>
               <span>Free</span>
             </div>
+            {discount > 0 ? (
+              <div className="flex justify-between text-teal">
+                <span>Istefada ({promoCode})</span>
+                <span>-{formatInr(discount)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between text-base font-bold">
               <span>Total</span>
-              <span className="text-teal">{formatInr(subtotal)}</span>
+              <span className="text-teal">{formatInr(total)}</span>
             </div>
           </div>
           {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}

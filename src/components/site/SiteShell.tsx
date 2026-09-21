@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+import { IstefadaOfferBanner } from "@/components/site/IstefadaOfferBanner";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
 
@@ -44,6 +45,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <ReservationContext.Provider value={value}>
       <div className="min-h-screen bg-background text-foreground">
+        <IstefadaOfferBanner />
         <SiteHeader />
         <main>{children}</main>
         <SiteFooter />

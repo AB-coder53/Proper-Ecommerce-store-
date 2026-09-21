@@ -1,12 +1,27 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { ADMIN_COOKIE_NAME } from "@/lib/admin-constants";
+import { SITE_URL, WHOLESALE_PATH, WHOLESALE_REDIRECT_HOSTS } from "@/lib/site";
+
+const wholesaleHosts = new Set(WHOLESALE_REDIRECT_HOSTS.map((host) => host.toLowerCase()));
+
+function redirectWholesaleDomain(request: NextRequest) {
+  const hostname = request.nextUrl.hostname.toLowerCase();
+  if (!wholesaleHosts.has(hostname)) return null;
+
+  const destination = new URL(WHOLESALE_PATH, SITE_URL);
+  destination.search = request.nextUrl.search;
+  return NextResponse.redirect(destination, 308);
+}
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const wholesaleRedirect = redirectWholesaleDomain(request);
+  if (wholesaleRedirect) return wholesaleRedirect;
 
-  if (!pathname.startsWith("/admin")) return NextResponse.next();
-  if (pathname === "/admin/login") return NextResponse.next();
+  const { pathname } = request.nextUrl;
+  if (!pathname.startsWith("/admin") || pathname === "/admin/login") {
+    return NextResponse.next();
+  }
 
   const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
   if (!token) {
@@ -20,5 +35,16 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/wholesale",
+    {
+      source: "/:path*",
+      has: [{ type: "host", value: "abcollection.mrch.in" }],
+    },
+    {
+      source: "/:path*",
+      has: [{ type: "host", value: "www.abcollection.mrch.in" }],
+    },
+  ],
 };

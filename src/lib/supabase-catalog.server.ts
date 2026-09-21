@@ -40,8 +40,13 @@ function createClientWithKey(url: string, key: string): SupabaseClient<Database>
   });
 }
 
+let readClient: SupabaseClient<Database> | undefined;
+let writeClient: SupabaseClient<Database> | undefined;
+
 /** Public read client (publishable key). Safe for storefront SELECTs with RLS. */
 export function getSupabaseReadClient(): SupabaseClient<Database> {
+  if (readClient) return readClient;
+
   const url = process.env["SUPABASE_URL"] || process.env["NEXT_PUBLIC_SUPABASE_URL"];
   const key =
     process.env["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"] ||
@@ -52,11 +57,14 @@ export function getSupabaseReadClient(): SupabaseClient<Database> {
     throw new Error("Missing Supabase URL or publishable key for catalogue reads.");
   }
 
-  return createClientWithKey(url, key);
+  readClient = createClientWithKey(url, key);
+  return readClient;
 }
 
 /** Admin write client (service role). Required for create/update/delete. */
 export function getSupabaseWriteClient(): SupabaseClient<Database> {
+  if (writeClient) return writeClient;
+
   const url = process.env["SUPABASE_URL"] || process.env["NEXT_PUBLIC_SUPABASE_URL"];
   const key = process.env["SUPABASE_SERVICE_ROLE_KEY"];
 
@@ -66,5 +74,6 @@ export function getSupabaseWriteClient(): SupabaseClient<Database> {
     );
   }
 
-  return createClientWithKey(url, key);
+  writeClient = createClientWithKey(url, key);
+  return writeClient;
 }

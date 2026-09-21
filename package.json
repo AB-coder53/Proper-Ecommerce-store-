@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "type": "module",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

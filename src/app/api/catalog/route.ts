@@ -6,7 +6,7 @@ import { getCatalog } from "@/lib/catalog.server";
 export async function GET() {
   const catalog = await getCatalog();
   return NextResponse.json(catalog, {
-    headers: { "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
   });
 }
 

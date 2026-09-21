@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { AppProviders } from "@/components/site/AppProviders";
+import { GoogleAnalytics } from "@/components/site/GoogleAnalytics";
+import { canonicalUrl } from "@/lib/canonical-url";
 import { getCatalog } from "@/lib/catalog.server";
 import { JsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
@@ -57,8 +59,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
           rel="stylesheet"
         />
+        <link rel="alternate" type="text/plain" href={canonicalUrl("/llms.txt")} title="LLMs.txt" />
+        <link rel="alternate" type="text/plain" href={canonicalUrl("/ai.txt")} title="AI.txt" />
       </head>
       <body>
+        <GoogleAnalytics />
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         <AppProviders catalog={catalog}>{children}</AppProviders>
       </body>

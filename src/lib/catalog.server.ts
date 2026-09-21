@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+import { revalidatePath } from "next/cache";
 import { promises as fs } from "fs";
 import path from "path";
 
@@ -17,6 +19,15 @@ const FALLBACK_PATH = path.join(process.cwd(), "data", "catalog.json");
 /** "supabase" once tables exist, "json" when tables are missing / unreachable. */
 let catalogSource: "unknown" | "supabase" | "json" = "unknown";
 
+const CATALOG_TTL_MS = 30_000;
+let memoryCatalog: { value: Catalog; expiresAt: number } | null = null;
+
+export function invalidateCatalogCache() {
+  memoryCatalog = null;
+  revalidatePath("/", "layout");
+  revalidatePath("/collection");
+}
+
 function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
@@ -31,6 +42,7 @@ function mapProduct(row: ProductRow): Product {
     sizes: row.sizes ?? [],
     price: row.price,
     badge: row.badge ?? "",
+    sizeChart: row.size_chart ?? "",
     featured: row.featured,
     sortOrder: row.sort_order,
   };
@@ -62,6 +74,7 @@ function toProductInsert(product: Product): ProductInsert {
     sizes: product.sizes,
     price: product.price,
     badge: product.badge || null,
+    size_chart: product.sizeChart?.trim() || null,
     featured: product.featured,
     sort_order: product.sortOrder,
   };
@@ -144,12 +157,21 @@ async function resolveCatalog(): Promise<Catalog> {
   }
 }
 
-export async function getCatalog(): Promise<Catalog> {
-  return resolveCatalog();
+async function loadCatalog(): Promise<Catalog> {
+  const now = Date.now();
+  if (memoryCatalog && memoryCatalog.expiresAt > now) {
+    return memoryCatalog.value;
+  }
+  const value = await resolveCatalog();
+  memoryCatalog = { value, expiresAt: now + CATALOG_TTL_MS };
+  return value;
 }
 
+/** Dedupes catalog reads within a single request (layout + page). */
+export const getCatalog = cache(loadCatalog);
+
 export async function getProducts(): Promise<Product[]> {
-  return (await resolveCatalog()).products;
+  return (await getCatalog()).products;
 }
 
 export async function getProductById(id: string): Promise<Product | undefined> {
@@ -162,7 +184,7 @@ export async function getAllProductIds(): Promise<string[]> {
 }
 
 export async function getCollections(): Promise<Collection[]> {
-  return (await resolveCatalog()).collections;
+  return (await getCatalog()).collections;
 }
 
 export async function getCollectionById(id: string): Promise<Collection | undefined> {
@@ -184,21 +206,23 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   const supabase = getSupabaseWriteClient();
   const payload = toProductInsert(product);
 
-  if (mode === "create") {
-    const { data, error } = await supabase.from("products").insert(payload).select("*").single();
-    if (error) throw new Error(error.message);
-    catalogSource = "supabase";
-    return mapProduct(data);
+  const persist = async (body: ProductInsert) => {
+    if (mode === "create") {
+      return supabase.from("products").insert(body).select("*").single();
+    }
+    return supabase.from("products").update(body).eq("id", product.id).select("*").single();
+  };
+
+  let { data, error } = await persist(payload);
+  if (error && /size_chart/.test(error.message)) {
+    const { size_chart: _ignored, ...withoutChart } = payload;
+    void _ignored;
+    ({ data, error } = await persist(withoutChart));
   }
-
-  const { data, error } = await supabase
-    .from("products")
-    .update(payload)
-    .eq("id", product.id)
-    .select("*")
-    .single();
-
-  if (error) throw new Error(error.message);
+  if (error || !data) throw new Error(error?.message ?? "Could not save product");
+  if (mode === "create") catalogSource = "supabase";
+  invalidateCatalogCache();
+  revalidatePath(`/collection/${product.id}`);
   return mapProduct(data);
 }
 
@@ -216,6 +240,8 @@ export async function deleteProduct(id: string) {
   await supabase.from("collections").update({ product_id: null }).eq("product_id", id);
   const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  invalidateCatalogCache();
+  revalidatePath(`/collection/${id}`);
 }
 
 export async function saveCollection(collection: Collection, mode: "create" | "update") {
@@ -241,6 +267,7 @@ export async function saveCollection(collection: Collection, mode: "create" | "u
     const { data, error } = await supabase.from("collections").insert(payload).select("*").single();
     if (error) throw new Error(error.message);
     catalogSource = "supabase";
+    invalidateCatalogCache();
     return mapCollection(data);
   }
 
@@ -252,6 +279,7 @@ export async function saveCollection(collection: Collection, mode: "create" | "u
     .single();
 
   if (error) throw new Error(error.message);
+  invalidateCatalogCache();
   return mapCollection(data);
 }
 
@@ -268,4 +296,5 @@ export async function deleteCollection(id: string) {
   const supabase = getSupabaseWriteClient();
   const { error } = await supabase.from("collections").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  invalidateCatalogCache();
 }

@@ -47,6 +47,7 @@ export const checkoutSchema = z.object({
   alternatePhone: z.string().trim().max(15).optional().or(z.literal("")),
   mode: z.enum(["cart", "buy_now"]).default("cart"),
   buyNow: cartItemInputSchema.optional(),
+  promoCode: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 export const trackOrderSchema = z.object({

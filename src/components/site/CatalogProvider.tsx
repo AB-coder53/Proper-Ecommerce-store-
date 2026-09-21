@@ -18,7 +18,7 @@ export function CatalogProvider({ children, initial }: { children: ReactNode; in
   const [ready, setReady] = useState(Boolean(initial));
 
   const refresh = async () => {
-    const res = await fetch("/api/catalog", { cache: "no-store" });
+    const res = await fetch("/api/catalog");
     if (!res.ok) return;
     const data = (await res.json()) as Catalog;
     setCatalog(data);

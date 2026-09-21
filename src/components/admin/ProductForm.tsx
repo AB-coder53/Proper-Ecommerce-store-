@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
-import { ImageUploadField, ListField } from "@/components/admin/AdminFields";
+import { ImageUploadField, ListField, SizeChartField } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/catalog-types";
 import { SIZES } from "@/lib/catalog-types";
@@ -22,6 +22,7 @@ const emptyProduct = (): Product => ({
   sizes: [...SIZES],
   price: "",
   badge: "",
+  sizeChart: "",
   featured: true,
   sortOrder: 0,
 });
@@ -45,6 +46,7 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
         images: form.images.length ? form.images : form.image ? [form.image] : [],
         image: form.image || form.images[0] || "",
         badge: form.badge || "",
+        sizeChart: form.sizeChart || "",
       };
       const res = await fetch(
         mode === "create" ? "/api/admin/products" : `/api/admin/products/${form.id}`,
@@ -129,6 +131,7 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
       <ListField label="Details" value={form.details} onChange={(v) => set("details", v)} />
       <ListField label="Colors" value={form.colors} onChange={(v) => set("colors", v)} />
       <ListField label="Sizes" value={form.sizes} onChange={(v) => set("sizes", v)} />
+      <SizeChartField value={form.sizeChart ?? ""} onChange={(v) => set("sizeChart", v)} />
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

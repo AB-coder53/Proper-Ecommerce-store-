@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
 import { formatInr, parsePriceInr } from "@/lib/price";
@@ -12,6 +13,7 @@ import { formatInr, parsePriceInr } from "@/lib/price";
 export default function CartPage() {
   const { customer, cart, guestCart, openAuth, updateCartQuantity, removeFromCart } = useCommerce();
   const { products } = useCatalog();
+  const { hasOffer, promoCode, discountInr } = useIstefadaOffer();
   const [hydratedGuest, setHydratedGuest] = useState<
     {
       key: string;
@@ -60,6 +62,8 @@ export default function CartPage() {
     () => lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [lines],
   );
+  const discount = hasOffer ? Math.min(discountInr, subtotal) : 0;
+  const total = Math.max(0, subtotal - discount);
 
   const checkout = () => {
     if (!customer) {
@@ -158,9 +162,15 @@ export default function CartPage() {
                 <span className="text-muted-foreground">Shipping</span>
                 <span className="font-semibold">Free</span>
               </div>
+              {discount > 0 ? (
+                <div className="flex justify-between text-teal">
+                  <span>Istefada ({promoCode})</span>
+                  <span className="font-semibold">-{formatInr(discount)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between border-t border-border pt-3 text-base">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold text-teal">{formatInr(subtotal)}</span>
+                <span className="font-bold text-teal">{formatInr(total)}</span>
               </div>
             </div>
             <Button

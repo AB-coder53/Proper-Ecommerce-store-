@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     if (!verifyAdminCredentials(username, password)) {
       return NextResponse.json(
-        { error: "Invalid login credentials. Use: Abbass Badwahwala / Abbass@786" },
+        { error: "Invalid username or password. Please try again." },
         { status: 401 },
       );
     }

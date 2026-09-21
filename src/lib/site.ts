@@ -1,7 +1,17 @@
+import { CANONICAL_SITE_ORIGIN } from "@/lib/canonical-url";
+
 export const SITE_NAME = "AB Collection";
 export const SITE_TAGLINE = "Premium Everyday Essentials";
 export const SITE_URL =
   process.env["NEXT_PUBLIC_SITE_URL"]?.replace(/\/$/, "") || "https://abcollection.co.in";
+export const PRODUCTION_SITE_URL = CANONICAL_SITE_ORIGIN;
+export const WHOLESALE_STORE_URL =
+  process.env["NEXT_PUBLIC_WHOLESALE_URL"]?.replace(/\/$/, "") || "https://abcollection.mrch.in";
+export const WHOLESALE_PATH = "/wholesale";
+export const WHOLESALE_REDIRECT_HOSTS = [
+  "abcollection.mrch.in",
+  "www.abcollection.mrch.in",
+] as const;
 export const SITE_EMAIL = "abbasbadwahwala53@gmail.com";
 export const SITE_INSTAGRAM = "https://instagram.com/abcollection.co.in";
 export const SITE_LOCALE = "en_IN";

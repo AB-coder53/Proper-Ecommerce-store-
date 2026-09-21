@@ -7,7 +7,7 @@ import { JsonLd, breadcrumbJsonLd, buildPageMetadata, productJsonLd } from "@/li
 
 type Props = { params: Promise<{ id: string }> };
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export async function generateStaticParams() {
   const ids = await getAllProductIds();

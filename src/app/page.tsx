@@ -7,7 +7,7 @@ import {
 import { getCatalog } from "@/lib/catalog.server";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export const metadata = buildPageMetadata({
   title: "Premium Everyday Essentials, Launching Soon",

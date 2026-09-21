@@ -18,6 +18,7 @@ import type {
   OrderItem,
   WishlistItem,
 } from "@/lib/commerce-types";
+import { resolveIstefadaDiscount } from "@/lib/istefada-offer";
 import { makeOrderNumber } from "@/lib/order-id";
 import { formatInr, parsePriceInr } from "@/lib/price";
 import { normalizeMobile } from "@/lib/reservation-utils";
@@ -760,7 +761,7 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   const shippingCost = SHIPPING_COST_INR;
-  const discount = 0;
+  const discount = resolveIstefadaDiscount(input.promoCode, subtotal);
   const totalAmount = subtotal + shippingCost - discount;
   const now = new Date().toISOString();
   const orderId = randomUUID();

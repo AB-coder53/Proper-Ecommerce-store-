@@ -1,31 +1,30 @@
 import type { MetadataRoute } from "next";
 
-import { getAllProductIds } from "@/lib/catalog.server";
-import { SITE_URL } from "@/lib/site";
+import { canonicalUrl } from "@/lib/canonical-url";
+import { getProducts } from "@/lib/catalog.server";
+import { PUBLIC_STATIC_ROUTES } from "@/lib/seo-routes";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const staticRoutes: MetadataRoute.Sitemap = [
-    { url: SITE_URL, lastModified: now, changeFrequency: "weekly", priority: 1 },
-    {
-      url: `${SITE_URL}/collection`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    { url: `${SITE_URL}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${SITE_URL}/faq`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${SITE_URL}/contact`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
-  ];
+  const products = await getProducts();
 
-  const ids = await getAllProductIds();
-  const productRoutes: MetadataRoute.Sitemap = ids.map((id) => ({
-    url: `${SITE_URL}/collection/${id}`,
+  const staticRoutes: MetadataRoute.Sitemap = PUBLIC_STATIC_ROUTES.map(
+    ({ path, changeFrequency, priority }) => ({
+      url: canonicalUrl(path),
+      lastModified: now,
+      changeFrequency,
+      priority,
+    }),
+  );
+
+  const productRoutes: MetadataRoute.Sitemap = products.map((product) => ({
+    url: canonicalUrl(`/collection/${product.id}`),
     lastModified: now,
     changeFrequency: "weekly",
-    priority: 0.8,
+    priority: product.featured ? 0.85 : 0.8,
   }));
 
   return [...staticRoutes, ...productRoutes];

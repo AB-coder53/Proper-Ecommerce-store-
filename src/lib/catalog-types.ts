@@ -18,6 +18,7 @@ export const productSchema = z.object({
   sizes: z.array(z.string().trim().min(1).max(10)).min(1).max(20),
   price: z.string().trim().min(1).max(40),
   badge: z.string().trim().max(40).optional().or(z.literal("")),
+  sizeChart: z.string().trim().max(500).optional().or(z.literal("")),
   featured: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(9999).default(0),
 });

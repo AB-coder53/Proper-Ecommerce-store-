@@ -1,0 +1,110 @@
+.privilege-page {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.privilege-page .privilege-serif,
+.privilege-page h1,
+.privilege-page h2,
+.privilege-page h3,
+.privilege-page h4 {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+@keyframes privilege-card-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes privilege-gleam {
+  0%,
+  100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 16px rgba(15, 118, 110, 0.45);
+  }
+}
+
+@keyframes privilege-badge-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    background-color: rgba(15, 118, 110, 0.12);
+  }
+  50% {
+    transform: scale(1.03);
+    background-color: rgba(15, 118, 110, 0.22);
+  }
+}
+
+@keyframes privilege-shimmer {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  35%,
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+@keyframes privilege-dot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.4;
+  }
+}
+
+.privilege-page .reward-card-unlock {
+  animation: privilege-card-reveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.privilege-page .reward-amount-gleam {
+  animation: privilege-gleam 3.2s ease-in-out infinite 0.6s;
+}
+
+.privilege-page .reward-badge-unlock {
+  animation: privilege-badge-pulse 2.8s ease-in-out infinite 0.8s;
+}
+
+.privilege-page .gold-dot-pulse {
+  animation: privilege-dot-pulse 2s ease-in-out infinite;
+}
+
+.privilege-page .card-shimmer-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(15, 118, 110, 0.1),
+    rgba(255, 255, 255, 0.16),
+    rgba(15, 118, 110, 0.1),
+    transparent
+  );
+  animation: privilege-shimmer 5.5s ease-in-out infinite 1.2s;
+  pointer-events: none;
+}
+
+.privilege-page .pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.privilege-page .pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
