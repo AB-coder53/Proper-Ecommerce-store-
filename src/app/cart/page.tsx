@@ -9,6 +9,7 @@ import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
 import { formatInr, parsePriceInr } from "@/lib/price";
+import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 
 export default function CartPage() {
   const { customer, cart, guestCart, openAuth, updateCartQuantity, removeFromCart } = useCommerce();
@@ -62,7 +63,8 @@ export default function CartPage() {
     () => lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [lines],
   );
-  const discount = hasOffer ? Math.min(discountInr, subtotal) : 0;
+  const itemCount = useMemo(() => lines.reduce((n, line) => n + line.quantity, 0), [lines]);
+  const discount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
   const total = Math.max(0, subtotal - discount);
 
   const checkout = () => {
@@ -115,7 +117,18 @@ export default function CartPage() {
                         {line.color} · Size {line.size}
                       </p>
                       <p className="mt-2 text-sm font-semibold text-teal">
-                        {formatInr(line.unitPrice)}
+                        {hasOffer ? (
+                          <span className="flex flex-col">
+                            <span className="text-xs font-normal text-muted-foreground line-through">
+                              {formatInr(line.unitPrice)}
+                            </span>
+                            <span>
+                              {formatInr(line.unitPrice - istefadaUnitOff(line.unitPrice))}
+                            </span>
+                          </span>
+                        ) : (
+                          formatInr(line.unitPrice)
+                        )}
                       </p>
                     </div>
                     <button
@@ -164,7 +177,9 @@ export default function CartPage() {
               </div>
               {discount > 0 ? (
                 <div className="flex justify-between text-teal">
-                  <span>Istefada ({promoCode})</span>
+                  <span>
+                    Istefada ₹{discountInr} × {itemCount}
+                  </span>
                   <span className="font-semibold">-{formatInr(discount)}</span>
                 </div>
               ) : null}

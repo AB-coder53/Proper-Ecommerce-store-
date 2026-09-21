@@ -3,14 +3,18 @@
 import Link from "next/link";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/catalog-types";
+import { getDiscountedPriceLabel } from "@/lib/istefada-offer";
 
 export function ProductCard({ product, badge }: { product: Product; badge?: string | undefined }) {
   const { addToCart } = useCommerce();
+  const { hasOffer } = useIstefadaOffer();
   const label = badge || product.badge || "";
   const defaultSize = product.sizes[0] ?? "M";
   const defaultColor = product.colors[0] ?? "Default";
+  const priced = getDiscountedPriceLabel(product.price);
 
   return (
     <article className="flex h-full flex-col rounded-3xl border border-border bg-background p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
@@ -39,7 +43,14 @@ export function ProductCard({ product, badge }: { product: Product; badge?: stri
               {product.name}
             </Link>
           </h3>
-          <p className="shrink-0 pt-0.5 text-sm font-semibold text-teal">{product.price}</p>
+          {hasOffer && priced.final > 0 ? (
+            <div className="shrink-0 text-right">
+              <p className="text-xs text-muted-foreground line-through">{priced.originalLabel}</p>
+              <p className="text-sm font-semibold text-teal">{priced.finalLabel}</p>
+            </div>
+          ) : (
+            <p className="shrink-0 pt-0.5 text-sm font-semibold text-teal">{product.price}</p>
+          )}
         </div>
         <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
           {product.tagline}

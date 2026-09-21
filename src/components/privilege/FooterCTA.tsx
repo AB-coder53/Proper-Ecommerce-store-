@@ -50,7 +50,7 @@ export function FooterCTA({ onShopNow }: FooterCTAProps) {
         </button>
 
         <span className="text-[10px] text-white/50 uppercase tracking-[0.14em] mt-8 font-medium">
-          ₹100 OFF • FIRST ORDER • ONE-TIME REWARD • AB COLLECTION
+          ₹100 OFF EVERY PRODUCT • AB COLLECTION
         </span>
       </div>
     </footer>

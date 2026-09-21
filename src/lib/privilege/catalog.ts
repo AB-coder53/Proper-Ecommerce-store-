@@ -1,5 +1,5 @@
 import type { Product } from "@/lib/catalog-types";
-import { ISTEFADA_DISCOUNT_INR } from "@/lib/istefada-offer";
+import { applyIstefadaDiscount } from "@/lib/istefada-offer";
 import type { PrivilegeProduct } from "@/lib/privilege/types";
 import { parsePriceInr } from "@/lib/seo";
 
@@ -14,10 +14,6 @@ function imageForColor(product: Product, color: string) {
     return images[orderIndex] ?? product.image;
   }
   return product.image;
-}
-
-export function applyIstefadaDiscount(originalPrice: number, discount = ISTEFADA_DISCOUNT_INR) {
-  return Math.max(originalPrice - discount, 0);
 }
 
 export function mapCatalogProductToPrivilege(product: Product): PrivilegeProduct | null {

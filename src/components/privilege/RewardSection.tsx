@@ -87,8 +87,8 @@ export function RewardSection({ onShopNow }: RewardSectionProps) {
           Your reward is unlocked.
         </p>
         <p className="text-[15px] leading-relaxed text-muted-foreground max-w-xs mb-6">
-          Tap Shop Now to browse AB Collection. Your ₹100 Istefada savings apply automatically at
-          checkout.
+          Tap Shop Now to browse AB Collection. Your ₹100 Istefada savings apply on every product
+          automatically at checkout.
         </p>
 
         <button

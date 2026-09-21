@@ -8,14 +8,27 @@ export const ISTEFADA_SOURCE = "istefada";
 /** Query param: /?from=istefada activates the offer for this browser session. */
 export const ISTEFADA_FROM_QUERY = "istefada";
 
+export type IstefadaPriceLine = {
+  unitPrice: number;
+  quantity: number;
+};
+
 export function applyIstefadaDiscount(originalPrice: number, discount = ISTEFADA_DISCOUNT_INR) {
   return Math.max(originalPrice - discount, 0);
 }
 
-export function resolveIstefadaDiscount(promoCode: string | undefined, subtotal: number) {
+export function istefadaUnitOff(originalPrice: number, discount = ISTEFADA_DISCOUNT_INR) {
+  if (originalPrice <= 0) return 0;
+  return Math.min(discount, originalPrice);
+}
+
+/** ₹100 off each unit, not a single cut on the cart total. */
+export function resolveIstefadaDiscount(promoCode: string | undefined, lines: IstefadaPriceLine[]) {
   if (promoCode?.trim().toUpperCase() !== ISTEFADA_PROMO_CODE) return 0;
-  if (subtotal <= 0) return 0;
-  return Math.min(ISTEFADA_DISCOUNT_INR, subtotal);
+  return lines.reduce((sum, line) => {
+    const quantity = Math.max(0, line.quantity);
+    return sum + istefadaUnitOff(line.unitPrice) * quantity;
+  }, 0);
 }
 
 export function getDiscountedPriceLabel(catalogPrice: string) {

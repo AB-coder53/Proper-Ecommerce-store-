@@ -17,9 +17,8 @@ export function IstefadaOfferBanner() {
         <div className="flex min-w-0 items-center gap-2">
           <Tag className="size-4 shrink-0 text-teal" aria-hidden />
           <p className="truncate">
-            <span className="font-semibold text-teal">₹{discountInr} Istefada reward active.</span>{" "}
-            Code <span className="font-mono font-semibold">{promoCode}</span> applies automatically
-            at checkout.
+            <span className="font-semibold text-teal">₹{discountInr} off every product.</span> Code{" "}
+            <span className="font-mono font-semibold">{promoCode}</span> applies automatically.
           </p>
         </div>
         <button

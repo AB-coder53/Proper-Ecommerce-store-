@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { BUY_NOW_KEY } from "@/lib/commerce-constants";
 import type { CartItemInput, CustomerAddress, Order } from "@/lib/commerce-types";
 import { formatInr, parsePriceInr } from "@/lib/price";
+import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 
 export default function CheckoutClient() {
   const router = useRouter();
@@ -93,7 +94,8 @@ export default function CheckoutClient() {
   }, [mode, buyNow, products, cart]);
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const discount = hasOffer ? Math.min(discountInr, subtotal) : 0;
+  const itemCount = lines.reduce((n, line) => n + line.quantity, 0);
+  const discount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
   const total = Math.max(0, subtotal - discount);
 
   const submit = async (event: FormEvent) => {
@@ -348,7 +350,22 @@ export default function CheckoutClient() {
                   <p className="text-muted-foreground">
                     {line.color} · {line.size} · Qty {line.quantity}
                   </p>
-                  <p className="mt-1 font-semibold text-teal">{formatInr(line.lineTotal)}</p>
+                  <p className="mt-1 font-semibold text-teal">
+                    {hasOffer ? (
+                      <span className="flex flex-col">
+                        <span className="text-xs font-normal text-muted-foreground line-through">
+                          {formatInr(line.lineTotal)}
+                        </span>
+                        <span>
+                          {formatInr(
+                            (line.unitPrice - istefadaUnitOff(line.unitPrice)) * line.quantity,
+                          )}
+                        </span>
+                      </span>
+                    ) : (
+                      formatInr(line.lineTotal)
+                    )}
+                  </p>
                 </div>
               </li>
             ))}
@@ -364,7 +381,9 @@ export default function CheckoutClient() {
             </div>
             {discount > 0 ? (
               <div className="flex justify-between text-teal">
-                <span>Istefada ({promoCode})</span>
+                <span>
+                  Istefada ₹{discountInr} × {itemCount}
+                </span>
                 <span>-{formatInr(discount)}</span>
               </div>
             ) : null}
