@@ -149,13 +149,17 @@ export function ProductDetail({ product }: { product: Product }) {
           <div className="mt-4">
             <p className="text-sm text-muted-foreground line-through">{priced.originalLabel}</p>
             <p className="text-2xl font-semibold text-teal">{priced.finalLabel}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Istefada ₹{priced.original - priced.final} off applied</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Istefada ₹{priced.original - priced.final} off applied
+            </p>
           </div>
         ) : (
           <p className="mt-4 text-2xl font-semibold text-teal">{product.price}</p>
         )}
 
-        <p className="mt-6 text-base leading-relaxed text-muted-foreground">{product.description}</p>
+        <p className="mt-6 text-base leading-relaxed text-muted-foreground">
+          {product.description}
+        </p>
 
         <ul className="mt-8 space-y-3">
           {product.details.map((detail) => (
@@ -274,7 +278,9 @@ export function ProductDetail({ product }: { product: Product }) {
           <DialogContent className="flex max-h-[min(90vh,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
             <div className="shrink-0 border-b border-border px-5 py-4">
               <DialogTitle className="font-display text-xl">Size Chart</DialogTitle>
-              <DialogDescription className="sr-only">Size chart for {product.name}</DialogDescription>
+              <DialogDescription className="sr-only">
+                Size chart for {product.name}
+              </DialogDescription>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
               <img

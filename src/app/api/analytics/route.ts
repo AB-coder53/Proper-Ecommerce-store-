@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
-import { analyticsEventSchema, isAnalyticsTableReady, recordAnalyticsEvent } from "@/lib/analytics.server";
+import {
+  analyticsEventSchema,
+  isAnalyticsTableReady,
+  recordAnalyticsEvent,
+} from "@/lib/analytics.server";
 
 async function readJsonBody(request: Request): Promise<unknown> {
   const contentType = request.headers.get("content-type") ?? "";

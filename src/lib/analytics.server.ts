@@ -107,7 +107,10 @@ export async function recordAnalyticsEvent(input: AnalyticsEventInput, userAgent
   });
 
   if (error) {
-    if (error.message.includes("site_analytics_events") || error.message.includes("Could not find the table")) {
+    if (
+      error.message.includes("site_analytics_events") ||
+      error.message.includes("Could not find the table")
+    ) {
       analyticsReady = false;
       analyticsCheckedAt = Date.now();
       return;
