@@ -13,7 +13,7 @@ const emptyCollection = (): Collection => ({
   title: "",
   image: "",
   productId: "",
-  tint: "bg-[#f5e9a8]",
+  tint: "bg-white",
   sortOrder: 0,
 });
 
@@ -101,7 +101,7 @@ export function CollectionForm({
           <input
             value={form.tint}
             onChange={(e) => set("tint", e.target.value)}
-            placeholder="bg-[#f5e9a8]"
+            placeholder="bg-white"
             className="h-11 w-full rounded-xl border border-border px-3 text-sm"
           />
         </div>

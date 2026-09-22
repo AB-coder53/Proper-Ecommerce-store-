@@ -50,7 +50,7 @@ export const collectionSchema = z.object({
   title: z.string().trim().min(2).max(80),
   image: z.string().trim().min(1).max(500),
   productId: z.string().trim().max(80).optional().or(z.literal("")),
-  tint: z.string().trim().min(1).max(80).default("bg-[#f5e9a8]"),
+  tint: z.string().trim().min(1).max(80).default("bg-white"),
   sortOrder: z.number().int().min(0).max(9999).default(0),
 });
 

@@ -105,10 +105,8 @@ export function HomeDiscover({ collections }: { collections: Collection[] }) {
           const href = category.productId ? `/collection/${category.productId}` : "/collection";
           return (
             <Reveal key={category.id} delay={index * 90}>
-              <article
-                className={`${category.tint} overflow-hidden rounded-[1.75rem] p-4 pb-5 shadow-sm`}
-              >
-                <Link href={href} className="block overflow-hidden rounded-[1.25rem] bg-white/40">
+              <article className="overflow-hidden rounded-[1.75rem] bg-white p-4 pb-5 shadow-sm">
+                <Link href={href} className="block overflow-hidden rounded-[1.25rem] bg-white">
                   <ProductImage
                     src={category.image}
                     alt={`${category.title} tees from AB Collection`}

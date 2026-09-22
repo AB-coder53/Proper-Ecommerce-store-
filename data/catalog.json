@@ -132,7 +132,7 @@
       "title": "Oversized",
       "image": "/images/oversized-lavender.png",
       "productId": "oversized-240",
-      "tint": "bg-[#f5e9a8]",
+      "tint": "bg-white",
       "sortOrder": 1
     },
     {
@@ -140,7 +140,7 @@
       "title": "Regular Fit",
       "image": "/images/regular-white.webp",
       "productId": "regular-240",
-      "tint": "bg-[#f7ecb0]",
+      "tint": "bg-white",
       "sortOrder": 2
     },
     {
@@ -148,7 +148,7 @@
       "title": "French Terry",
       "image": "/images/terry-beige.png",
       "productId": "terry-260",
-      "tint": "bg-[#f3e6a0]",
+      "tint": "bg-white",
       "sortOrder": 3
     }
   ]
