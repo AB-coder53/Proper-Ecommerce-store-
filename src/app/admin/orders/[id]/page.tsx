@@ -1,317 +1,35 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notFound, redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/AdminShell";
-import { OrderTimeline } from "@/components/commerce/OrderTimeline";
-import { Button } from "@/components/ui/button";
-import {
-  ORDER_STATUS_LABELS,
-  ORDER_STATUSES,
-  PAYMENT_STATUS_LABELS,
-} from "@/lib/commerce-constants";
-import type { Order } from "@/lib/commerce-types";
-import type { OrderNotification } from "@/lib/notifications";
-import { formatInr } from "@/lib/price";
+import { OrderForm } from "@/components/admin/OrderForm";
+import { getAdminSession } from "@/lib/admin-auth.server";
+import { getProducts } from "@/lib/catalog.server";
+import { getOrderById } from "@/lib/commerce.server";
+import { buildPageMetadata } from "@/lib/seo";
 
-const EXTRA = ["cancelled", "failed", "returned"] as const;
+type Props = { params: Promise<{ id: string }> };
 
-export default function AdminOrderDetailPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [status, setStatus] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("");
-  const [trackingNumber, setTrackingNumber] = useState("");
-  const [carrier, setCarrier] = useState("");
-  const [trackingUrl, setTrackingUrl] = useState("");
-  const [notifications, setNotifications] = useState<OrderNotification[]>([]);
-  const [username, setUsername] = useState("Admin");
-  const [saving, setSaving] = useState(false);
+export async function generateMetadata({ params }: Props) {
+  const { id } = await params;
+  const order = await getOrderById(id);
+  return buildPageMetadata({
+    title: order ? `Order ${order.orderNumber}` : "Order",
+    description: "Edit order",
+    path: `/admin/orders/${id}`,
+    noIndex: true,
+  });
+}
 
-  useEffect(() => {
-    void (async () => {
-      const auth = await fetch("/api/admin/auth");
-      const authData = (await auth.json()) as { authenticated?: boolean; username?: string };
-      if (!authData.authenticated) {
-        router.replace("/admin/login");
-        return;
-      }
-      if (authData.username) setUsername(authData.username);
-
-      const res = await fetch(`/api/admin/orders/${params.id}`);
-      if (!res.ok) {
-        toast.error("Order not found");
-        router.replace("/admin/orders");
-        return;
-      }
-      const data = (await res.json()) as { order: Order };
-      setOrder(data.order);
-      setStatus(data.order.orderStatus);
-      setPaymentStatus(data.order.paymentStatus);
-      setTrackingNumber(data.order.trackingNumber ?? "");
-      setCarrier(data.order.carrier ?? "");
-      setTrackingUrl(data.order.trackingUrl ?? "");
-      const notes = await fetch(`/api/admin/orders/${params.id}/notifications`);
-      if (notes.ok) {
-        const noteData = (await notes.json()) as { notifications?: OrderNotification[] };
-        setNotifications(noteData.notifications ?? []);
-      }
-    })();
-  }, [params.id, router]);
-
-  const save = async (nextStatus = status) => {
-    if (!order) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/orders/${order.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderStatus: nextStatus,
-          paymentStatus,
-          trackingNumber,
-          carrier,
-          trackingUrl,
-        }),
-      });
-      const data = (await res.json()) as { order?: Order; error?: string };
-      if (!res.ok || !data.order) {
-        toast.error(data.error || "Could not update status");
-        return;
-      }
-      setOrder(data.order);
-      setStatus(data.order.orderStatus);
-      setPaymentStatus(data.order.paymentStatus);
-      setTrackingNumber(data.order.trackingNumber ?? "");
-      setCarrier(data.order.carrier ?? "");
-      setTrackingUrl(data.order.trackingUrl ?? "");
-      toast.success(
-        `Status updated to ${ORDER_STATUS_LABELS[data.order.orderStatus] ?? data.order.orderStatus}. Customers see this immediately.`,
-      );
-      const notes = await fetch(`/api/admin/orders/${data.order.id}/notifications`);
-      if (notes.ok) {
-        const noteData = (await notes.json()) as { notifications?: OrderNotification[] };
-        setNotifications(noteData.notifications ?? []);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!order) {
-    return (
-      <AdminShell username={username}>
-        <div className="min-h-[30vh]" />
-      </AdminShell>
-    );
-  }
+export default async function AdminOrderDetailPage({ params }: Props) {
+  const session = await getAdminSession();
+  if (!session) redirect("/admin/login");
+  const { id } = await params;
+  const [order, products] = await Promise.all([getOrderById(id), getProducts()]);
+  if (!order) notFound();
 
   return (
-    <AdminShell username={username}>
-      <Link href="/admin/orders" className="text-sm text-muted-foreground hover:text-foreground">
-        ← Orders
-      </Link>
-      <h1 className="mt-3 font-display text-3xl font-bold">#{order.orderNumber}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Updated {new Date(order.updatedAt).toLocaleString("en-IN")}
-      </p>
-
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-white p-5">
-          <h2 className="font-semibold">Customer</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div>
-              <dt className="text-muted-foreground">Name</dt>
-              <dd>{order.customerName}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Email</dt>
-              <dd className="break-all">{order.customerEmail}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Phone</dt>
-              <dd>{order.customerPhone}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Alternate</dt>
-              <dd>{order.alternatePhone || "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Address</dt>
-              <dd>
-                {order.addressLine1}
-                {order.addressLine2 ? `, ${order.addressLine2}` : ""}
-                <br />
-                {order.addressCity}, {order.addressState} {order.addressPincode}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-white p-5">
-          <h2 className="font-semibold">Status management</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Payment: {PAYMENT_STATUS_LABELS[order.paymentStatus] ?? order.paymentStatus}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {["processing", "shipped", "out_for_delivery", "delivered"].map((value) => (
-              <Button
-                key={value}
-                type="button"
-                variant={status === value ? "default" : "outline"}
-                disabled={saving}
-                onClick={() => void save(value)}
-                className="h-11 rounded-full px-4 text-xs tracking-[0.1em] uppercase"
-              >
-                {ORDER_STATUS_LABELS[value] ?? value}
-              </Button>
-            ))}
-          </div>
-          <label className="mt-4 block text-sm">
-            Payment status
-            <select
-              value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value)}
-              className="mt-1.5 w-full rounded-full border border-border bg-background px-4 py-2.5"
-            >
-              {Object.keys(PAYMENT_STATUS_LABELS).map((value) => (
-                <option key={value} value={value}>
-                  {PAYMENT_STATUS_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mt-4 block text-sm">
-            Order status
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mt-1.5 w-full rounded-full border border-border bg-background px-4 py-2.5"
-            >
-              {[...ORDER_STATUSES, ...EXTRA].map((value) => (
-                <option key={value} value={value}>
-                  {ORDER_STATUS_LABELS[value] ?? value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="mt-4 block text-sm">
-            Carrier
-            <input
-              value={carrier}
-              onChange={(e) => setCarrier(e.target.value)}
-              className="mt-1.5 w-full rounded-full border border-border bg-background px-4 py-2.5"
-              placeholder="Optional"
-            />
-          </label>
-          <label className="mt-4 block text-sm">
-            Tracking number
-            <input
-              value={trackingNumber}
-              onChange={(e) => setTrackingNumber(e.target.value)}
-              className="mt-1.5 w-full rounded-full border border-border bg-background px-4 py-2.5"
-              placeholder="Optional"
-            />
-          </label>
-          <label className="mt-4 block text-sm">
-            Tracking URL
-            <input
-              value={trackingUrl}
-              onChange={(e) => setTrackingUrl(e.target.value)}
-              className="mt-1.5 w-full rounded-full border border-border bg-background px-4 py-2.5"
-              placeholder="Only if provided by the carrier"
-            />
-          </label>
-          <Button
-            onClick={() => void save()}
-            disabled={saving}
-            className="mt-4 h-10 rounded-full bg-teal px-6 text-xs tracking-[0.1em] text-teal-foreground uppercase"
-          >
-            {saving ? "Updating..." : "Update status"}
-          </Button>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button asChild variant="outline" className="h-10 rounded-full">
-              <a href={`/api/admin/orders/${order.id}/invoice`} target="_blank" rel="noreferrer">
-                Preview invoice
-              </a>
-            </Button>
-            <Button asChild variant="outline" className="h-10 rounded-full">
-              <a href={`/api/admin/orders/${order.id}/invoice?download=1`}>Download invoice</a>
-            </Button>
-          </div>
-          <div className="mt-6">
-            <OrderTimeline status={order.orderStatus} />
-          </div>
-        </section>
-      </div>
-
-      <section className="mt-6 rounded-2xl border border-border bg-white p-5">
-        <h2 className="font-semibold">Products</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs tracking-[0.08em] text-muted-foreground uppercase">
-              <tr>
-                <th className="py-2 pr-4">Product</th>
-                <th className="py-2 pr-4">Variant</th>
-                <th className="py-2 pr-4">Qty</th>
-                <th className="py-2 pr-4">Unit</th>
-                <th className="py-2">Line</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.items.map((item) => (
-                <tr key={item.id} className="border-t border-border">
-                  <td className="py-3 pr-4">
-                    <div className="font-medium">{item.productName}</div>
-                    <div className="text-xs text-muted-foreground">{item.productId}</div>
-                  </td>
-                  <td className="py-3 pr-4">
-                    {item.color} / {item.size}
-                  </td>
-                  <td className="py-3 pr-4">{item.quantity}</td>
-                  <td className="py-3 pr-4">{formatInr(item.unitPrice)}</td>
-                  <td className="py-3 font-semibold">{formatInr(item.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-4 flex justify-end gap-8 text-sm">
-          <span>Subtotal {formatInr(order.subtotal)}</span>
-          <span>Shipping {formatInr(order.shippingCost)}</span>
-          <span>Discount {formatInr(order.discount)}</span>
-          <span className="font-bold text-teal">Total {formatInr(order.totalAmount)}</span>
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-border bg-white p-5">
-        <h2 className="font-semibold">Customer notifications</h2>
-        <ul className="mt-4 space-y-2 text-sm">
-          {notifications.length ? (
-            notifications.map((note) => (
-              <li
-                key={note.id}
-                className="flex flex-wrap justify-between gap-2 border-b border-border/70 py-2 last:border-0"
-              >
-                <span>
-                  {note.status === "sent" ? "✓" : note.status === "failed" ? "✕" : "•"}{" "}
-                  {String(note.eventType).replaceAll("_", " ")} — {note.channel}
-                </span>
-                <span className="text-muted-foreground capitalize">
-                  {note.status}
-                  {note.error ? ` · ${note.error}` : ""}
-                </span>
-              </li>
-            ))
-          ) : (
-            <li className="text-muted-foreground">No notifications recorded yet.</li>
-          )}
-        </ul>
-      </section>
+    <AdminShell username={session.username}>
+      <OrderForm key={order.updatedAt} mode="edit" initial={order} products={products} />
     </AdminShell>
   );
 }

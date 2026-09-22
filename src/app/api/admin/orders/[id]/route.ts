@@ -1,9 +1,14 @@
 import { after, NextResponse } from "next/server";
 
 import { requireAdminSession } from "@/lib/admin-auth.server";
-import { getOrderById, updateOrderStatus } from "@/lib/commerce.server";
+import {
+  getOrderById,
+  updateAdminOrder,
+  updateOrderStatus,
+  deleteAdminOrder,
+} from "@/lib/commerce.server";
 import { notifyOrderChanges } from "@/lib/notifications.server";
-import { orderStatusSchema } from "@/lib/commerce-types";
+import { adminOrderSchema, orderStatusSchema } from "@/lib/commerce-types";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +59,47 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json(
       { error: err.message || "Could not update order." },
       { status: err.status ?? (err.name === "ZodError" ? 400 : 500) },
+    );
+  }
+}
+
+export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdminSession();
+    const { id } = await context.params;
+    const previous = await getOrderById(id);
+    if (!previous) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+    const order = await updateAdminOrder(id, adminOrderSchema.parse(await request.json()));
+    after(() => {
+      void notifyOrderChanges(previous, order);
+    });
+    return NextResponse.json({ order }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  } catch (error) {
+    const err = error as Error & { status?: number };
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json(
+      { error: err.message || "Could not update order." },
+      { status: err.status ?? (err.name === "ZodError" ? 400 : 500) },
+    );
+  }
+}
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    await requireAdminSession();
+    const { id } = await context.params;
+    await deleteAdminOrder(id);
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+  } catch (error) {
+    const err = error as Error & { status?: number };
+    if (err.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json(
+      { error: err.message || "Could not delete order." },
+      { status: err.status ?? 500 },
     );
   }
 }

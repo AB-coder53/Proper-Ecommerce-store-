@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { DangerButton } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
 import {
   ORDER_STATUS_LABELS,
@@ -18,6 +20,7 @@ const QUICK_STATUSES = ["processing", "shipped", "delivered"] as const;
 const POLL_MS = 8000;
 
 export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) {
+  const router = useRouter();
   const [orders, setOrders] = useState(initialOrders);
   const [busyId, setBusyId] = useState<string | null>(null);
   const busyRef = useRef<string | null>(null);
@@ -88,6 +91,7 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
             <th className="px-4 py-3">Payment</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3">Date</th>
+            <th className="px-4 py-3">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -146,11 +150,37 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
               <td className="px-4 py-3 text-muted-foreground">
                 {new Date(order.createdAt).toLocaleString("en-IN")}
               </td>
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/admin/orders/${order.id}`}
+                    className="inline-flex h-10 items-center rounded-full border border-border px-3 text-xs font-semibold"
+                  >
+                    Edit
+                  </Link>
+                  <DangerButton
+                    label="Delete"
+                    onConfirm={async () => {
+                      const res = await fetch(`/api/admin/orders/${order.id}`, {
+                        method: "DELETE",
+                      });
+                      const data = (await res.json()) as { error?: string };
+                      if (!res.ok) {
+                        toast.error(data.error || "Could not delete order.");
+                        return;
+                      }
+                      setOrders((current) => current.filter((row) => row.id !== order.id));
+                      toast.success(`Order #${order.orderNumber} deleted.`);
+                      router.refresh();
+                    }}
+                  />
+                </div>
+              </td>
             </tr>
           ))}
           {!orders.length ? (
             <tr>
-              <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
+              <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
                 No orders yet.
               </td>
             </tr>

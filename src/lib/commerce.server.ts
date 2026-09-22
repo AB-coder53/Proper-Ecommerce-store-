@@ -6,9 +6,15 @@ import path from "path";
 
 import type { Product } from "@/lib/catalog-types";
 import { getProductById, getProducts, invalidateCatalogCache } from "@/lib/catalog.server";
-import { CART_MAX_QUANTITY, ORDER_STATUSES, SHIPPING_COST_INR } from "@/lib/commerce-constants";
+import {
+  CART_MAX_QUANTITY,
+  IMPORTED_CUSTOMER_PASSWORD,
+  ORDER_STATUSES,
+  SHIPPING_COST_INR,
+} from "@/lib/commerce-constants";
 import type {
   AddressInput,
+  AdminOrderInput,
   CartItemInput,
   CartLine,
   CheckoutInput,
@@ -1587,6 +1593,380 @@ export async function updateOrderStatus(
       return mergeOrderItems([order], store.orderItems)[0] ?? { ...order, items: existing.items };
     },
   );
+}
+
+async function ensureCustomerForAdminOrder(input: {
+  name: string;
+  email: string;
+  phone: string;
+  alternatePhone: string | null;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const phone = normalizeMobile(input.phone);
+  if (!phone) {
+    throw Object.assign(new Error("Enter a valid 10-digit Indian mobile number."), { status: 400 });
+  }
+  const existing = await findCustomerByEmail(email);
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  return createCustomerRecord({
+    id: randomUUID(),
+    email,
+    passwordHash: IMPORTED_CUSTOMER_PASSWORD,
+    fullName: input.name,
+    phone,
+    alternatePhone: input.alternatePhone,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function resolveAdminOrderItems(input: AdminOrderInput) {
+  const products = await getProducts();
+  const items: (OrderItem & { orderId: string })[] = [];
+  for (const row of input.items) {
+    const product = products.find((item) => item.id === row.productId);
+    const quantity = row.quantity;
+    const unitPrice = product ? row.unitPrice || parsePriceInr(product.price) : row.unitPrice;
+    const color = row.color.trim();
+    const size = row.size.trim();
+    items.push({
+      id: randomUUID(),
+      orderId: "",
+      productId: product?.id || row.productId?.trim() || "custom-item",
+      productName: product?.name || row.productName,
+      productImage: product
+        ? productImageForColor(product, color)
+        : row.productImage?.trim() || null,
+      size,
+      color,
+      quantity,
+      unitPrice,
+      lineTotal: unitPrice * quantity,
+      variantId: null,
+      sku: null,
+    });
+  }
+  return items;
+}
+
+async function applyAdminInventory(
+  orderId: string,
+  orderNumber: string,
+  items: OrderItem[],
+  orderStatus: string,
+  previous?: Order,
+) {
+  const shouldHold = !RELEASE_ORDER_STATUSES.has(orderStatus);
+  let inventoryState = previous?.inventoryState ?? "none";
+  if (inventoryState === "deducted") {
+    await restoreOrderInventory(
+      previous!.id,
+      previous!.orderNumber,
+      previous!.items.map((item) => ({
+        productId: item.productId,
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+      "ORDER_RELEASED",
+    );
+    inventoryState = "restored";
+  }
+  if (!shouldHold) return inventoryState;
+  if (previous && previous.inventoryState === "none") return "none";
+  const stockLines = [];
+  for (const item of items) {
+    const variant = await getVariant(item.productId, item.color, item.size);
+    if (!variant) continue;
+    stockLines.push({
+      productId: item.productId,
+      color: item.color,
+      size: item.size,
+      quantity: item.quantity,
+      productName: item.productName,
+    });
+  }
+  if (stockLines.length) {
+    await deductOrderInventory(orderId, orderNumber, stockLines);
+    invalidateCatalogCache();
+    return "deducted" as const;
+  }
+  return inventoryState;
+}
+
+function adminOrderRow(
+  id: string,
+  orderNumber: string,
+  customerId: string,
+  input: AdminOrderInput,
+  items: OrderItem[],
+  inventoryState: NonNullable<Order["inventoryState"]>,
+  now: string,
+  createdAt: string,
+): Omit<Order, "items"> {
+  const subtotal = items.reduce((sum, item) => sum + item.lineTotal, 0);
+  const shippingCost = input.shippingCost;
+  const discount = input.discount;
+  return {
+    id,
+    orderNumber,
+    customerId,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail.trim().toLowerCase(),
+    customerPhone: normalizeMobile(input.customerPhone) || input.customerPhone,
+    alternatePhone: input.alternatePhone?.trim()
+      ? normalizeMobile(input.alternatePhone) || input.alternatePhone.trim()
+      : null,
+    addressLine1: input.addressLine1,
+    addressLine2: input.addressLine2?.trim() || null,
+    addressCity: input.addressCity,
+    addressState: input.addressState,
+    addressPincode: input.addressPincode,
+    subtotal,
+    shippingCost,
+    discount,
+    totalAmount: Math.max(0, subtotal + shippingCost - discount),
+    paymentStatus: normalizePaymentStatus(input.paymentStatus),
+    orderStatus: normalizeOrderStatus(input.orderStatus),
+    inventoryState: inventoryState ?? "none",
+    promoCode: null,
+    couponDiscount: 0,
+    bundleDiscount: discount,
+    invoiceNumber: null,
+    paymentMethod: "prepaid",
+    trackingNumber: input.trackingNumber?.trim() || null,
+    carrier: input.carrier?.trim() || null,
+    trackingUrl: input.trackingUrl?.trim() || null,
+    checkoutId: null,
+    createdAt,
+    updatedAt: now,
+  };
+}
+
+function orderInsertPayload(order: Omit<Order, "items">) {
+  return {
+    id: order.id,
+    order_number: order.orderNumber,
+    customer_id: order.customerId,
+    customer_name: order.customerName,
+    customer_email: order.customerEmail,
+    customer_phone: order.customerPhone,
+    alternate_phone: order.alternatePhone,
+    address_line1: order.addressLine1,
+    address_line2: order.addressLine2,
+    address_city: order.addressCity,
+    address_state: order.addressState,
+    address_pincode: order.addressPincode,
+    subtotal: order.subtotal,
+    shipping_cost: order.shippingCost,
+    discount: order.discount,
+    total_amount: order.totalAmount,
+    payment_status: order.paymentStatus,
+    order_status: order.orderStatus,
+    inventory_state: order.inventoryState,
+    promo_code: order.promoCode,
+    coupon_discount: order.couponDiscount,
+    bundle_discount: order.bundleDiscount,
+    payment_method: order.paymentMethod,
+    tracking_number: order.trackingNumber,
+    carrier: order.carrier,
+    tracking_url: order.trackingUrl,
+    created_at: order.createdAt,
+    updated_at: order.updatedAt,
+  };
+}
+
+export async function createAdminOrder(input: AdminOrderInput): Promise<Order> {
+  const customer = await ensureCustomerForAdminOrder({
+    name: input.customerName,
+    email: input.customerEmail,
+    phone: input.customerPhone,
+    alternatePhone: input.alternatePhone?.trim()
+      ? normalizeMobile(input.alternatePhone) || input.alternatePhone.trim()
+      : null,
+  });
+  const now = new Date().toISOString();
+  const orderId = randomUUID();
+  const orderNumber = makeOrderNumber();
+  const resolved = await resolveAdminOrderItems(input);
+  const items = resolved.map((item) => ({ ...item, orderId }));
+  const holdStock = !RELEASE_ORDER_STATUSES.has(normalizeOrderStatus(input.orderStatus));
+  let inventoryState: NonNullable<Order["inventoryState"]> = "none";
+  if (holdStock) {
+    inventoryState =
+      (await applyAdminInventory(
+        orderId,
+        orderNumber,
+        items,
+        normalizeOrderStatus(input.orderStatus),
+      )) ?? "none";
+  }
+  const order = adminOrderRow(
+    orderId,
+    orderNumber,
+    customer.id,
+    input,
+    items,
+    inventoryState,
+    now,
+    now,
+  );
+  try {
+    await withDbOrFile(
+      async () => {
+        const sb = getCommerceDb();
+        const { error } = await sb.from("orders").insert(orderInsertPayload(order));
+        if (error) throw error;
+        const { error: itemsError } = await sb.from("order_items").insert(
+          items.map((item) => ({
+            id: item.id,
+            order_id: item.orderId,
+            product_id: item.productId,
+            product_name: item.productName,
+            product_image: item.productImage,
+            size: item.size,
+            color: item.color,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            line_total: item.lineTotal,
+          })),
+        );
+        if (itemsError) throw itemsError;
+      },
+      async () => {
+        const store = await readFileStore();
+        store.orders.push(order);
+        store.orderItems.push(...items);
+        await writeFileStore(store);
+      },
+    );
+  } catch (error) {
+    if (inventoryState === "deducted") {
+      await restoreOrderInventory(
+        orderId,
+        orderNumber,
+        items.map((item) => ({
+          productId: item.productId,
+          color: item.color,
+          size: item.size,
+          quantity: item.quantity,
+        })),
+        "ORDER_RELEASED",
+      ).catch(() => undefined);
+    }
+    throw error;
+  }
+  return { ...order, items };
+}
+
+export async function updateAdminOrder(orderId: string, input: AdminOrderInput): Promise<Order> {
+  const existing = await getOrderById(orderId);
+  if (!existing) throw Object.assign(new Error("Order not found."), { status: 404 });
+  const customer = await ensureCustomerForAdminOrder({
+    name: input.customerName,
+    email: input.customerEmail,
+    phone: input.customerPhone,
+    alternatePhone: input.alternatePhone?.trim()
+      ? normalizeMobile(input.alternatePhone) || input.alternatePhone.trim()
+      : null,
+  });
+  const now = new Date().toISOString();
+  const resolved = await resolveAdminOrderItems(input);
+  const items = resolved.map((item) => ({ ...item, orderId: existing.id }));
+  const inventoryState =
+    (await applyAdminInventory(
+      existing.id,
+      existing.orderNumber,
+      items,
+      normalizeOrderStatus(input.orderStatus),
+      existing,
+    )) ?? "none";
+  const order = adminOrderRow(
+    existing.id,
+    existing.orderNumber,
+    customer.id,
+    input,
+    items,
+    inventoryState,
+    now,
+    existing.createdAt,
+  );
+  order.invoiceNumber = existing.invoiceNumber ?? null;
+  order.promoCode = existing.promoCode ?? null;
+  order.checkoutId = existing.checkoutId ?? null;
+  await withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      const { error } = await sb
+        .from("orders")
+        .update(orderInsertPayload(order))
+        .eq("id", existing.id);
+      if (error) throw error;
+      await sb.from("order_items").delete().eq("order_id", existing.id);
+      const { error: itemsError } = await sb.from("order_items").insert(
+        items.map((item) => ({
+          id: item.id,
+          order_id: item.orderId,
+          product_id: item.productId,
+          product_name: item.productName,
+          product_image: item.productImage,
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: item.lineTotal,
+        })),
+      );
+      if (itemsError) throw itemsError;
+    },
+    async () => {
+      const store = await readFileStore();
+      const index = store.orders.findIndex((row) => row.id === existing.id);
+      if (index < 0) throw Object.assign(new Error("Order not found."), { status: 404 });
+      store.orders[index] = order;
+      store.orderItems = store.orderItems.filter((item) => item.orderId !== existing.id);
+      store.orderItems.push(...items);
+      await writeFileStore(store);
+    },
+  );
+  invalidateCatalogCache();
+  return { ...order, items };
+}
+
+export async function deleteAdminOrder(orderId: string) {
+  const existing = await getOrderById(orderId);
+  if (!existing) throw Object.assign(new Error("Order not found."), { status: 404 });
+  if (existing.inventoryState === "deducted") {
+    await restoreOrderInventory(
+      existing.id,
+      existing.orderNumber,
+      existing.items.map((item) => ({
+        productId: item.productId,
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+      "ORDER_CANCELLED",
+    );
+    invalidateCatalogCache();
+  }
+  await withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      await sb.from("order_items").delete().eq("order_id", existing.id);
+      const { error } = await sb.from("orders").delete().eq("id", existing.id);
+      if (error) throw error;
+    },
+    async () => {
+      const store = await readFileStore();
+      store.orderItems = store.orderItems.filter((item) => item.orderId !== existing.id);
+      store.orders = store.orders.filter((order) => order.id !== existing.id);
+      await writeFileStore(store);
+    },
+  );
+  return { ok: true as const, id: existing.id };
 }
 
 export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {

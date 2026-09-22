@@ -68,11 +68,45 @@ export const orderStatusSchema = z.enum([...ORDER_STATUSES, "cancelled", "failed
   ...string[],
 ]);
 
+export const adminOrderItemSchema = z.object({
+  productId: z.string().trim().max(80).optional().or(z.literal("")),
+  productName: z.string().trim().min(1).max(160),
+  productImage: z.string().trim().max(500).optional().or(z.literal("")),
+  size: z.string().trim().min(1).max(20),
+  color: z.string().trim().min(1).max(40),
+  quantity: z.number().int().min(1).max(CART_MAX_QUANTITY),
+  unitPrice: z.number().int().min(0).max(1_000_000),
+});
+
+export const adminOrderSchema = z.object({
+  customerName: z.string().trim().min(2).max(120),
+  customerEmail: z.string().trim().email().max(200),
+  customerPhone: z.string().trim().min(10).max(15),
+  alternatePhone: z.string().trim().max(15).optional().or(z.literal("")),
+  addressLine1: z.string().trim().min(3).max(200),
+  addressLine2: z.string().trim().max(200).optional().or(z.literal("")),
+  addressCity: z.string().trim().min(2).max(80),
+  addressState: z.string().trim().min(2).max(80),
+  addressPincode: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "Enter a valid 6-digit PIN code"),
+  orderStatus: orderStatusSchema.default("confirmed"),
+  paymentStatus: z.enum(["pending", "paid", "failed", "refunded"]).default("pending"),
+  trackingNumber: z.string().trim().max(80).optional().or(z.literal("")),
+  carrier: z.string().trim().max(80).optional().or(z.literal("")),
+  trackingUrl: z.string().trim().max(300).optional().or(z.literal("")),
+  shippingCost: z.number().int().min(0).max(100000).default(0),
+  discount: z.number().int().min(0).max(1_000_000).default(0),
+  items: z.array(adminOrderItemSchema).min(1, "Add at least one item").max(20),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type AddressInput = z.infer<typeof addressSchema>;
 export type CartItemInput = z.infer<typeof cartItemInputSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+export type AdminOrderInput = z.output<typeof adminOrderSchema>;
 
 export type CustomerPublic = {
   id: string;
