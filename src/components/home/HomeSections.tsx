@@ -23,7 +23,7 @@ export function HomeHero({ products }: { products: Product[] }) {
   const images = fanImages.length >= 3 ? fanImages : FAN_FALLBACK;
 
   return (
-    <section className="overflow-hidden px-5 pb-14 pt-8 sm:px-8 sm:pb-24 sm:pt-14">
+    <section className="overflow-x-clip px-5 pb-14 pt-8 sm:px-8 sm:pb-24 sm:pt-14">
       <div className="mx-auto max-w-5xl text-center">
         <div className="animate-fan-in inline-flex items-center gap-2 rounded-full bg-ink px-4 py-1.5 text-[0.65rem] font-semibold tracking-[0.16em] text-ink-foreground uppercase">
           <ShoppingBag className="size-3.5" strokeWidth={2} />
@@ -57,32 +57,34 @@ export function HomeHero({ products }: { products: Product[] }) {
         </div>
       </div>
 
-      <div className="relative mx-auto mt-12 flex w-full max-w-6xl items-end justify-center gap-1.5 overflow-hidden sm:mt-16 sm:gap-4 md:gap-5">
-        {images.map((src, index) => {
-          const tilt = rotations[index % rotations.length] ?? 0;
-          return (
-            <div
-              key={`${src}-${index}`}
-              className="animate-fan-in w-[18%] max-w-[11rem] min-w-0 origin-bottom"
-              style={{ animationDelay: `${260 + index * 80}ms` }}
-            >
+      <div className="relative mx-auto mt-8 w-full max-w-6xl px-3 sm:mt-12 sm:px-10">
+        <div className="flex items-end justify-center gap-2 py-8 sm:gap-5 sm:py-12 md:gap-6">
+          {images.map((src, index) => {
+            const tilt = rotations[index % rotations.length] ?? 0;
+            return (
               <div
-                className="overflow-hidden rounded-xl bg-muted shadow-[0_14px_32px_rgba(0,0,0,0.12)] transition-transform duration-500 [transform:rotate(calc(var(--tilt)*0.55))] hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.55))] sm:rounded-2xl sm:shadow-[0_18px_40px_rgba(0,0,0,0.12)] sm:[transform:rotate(var(--tilt))] sm:hover:[transform:translateY(-0.5rem)_rotate(var(--tilt))]"
-                style={{ ["--tilt" as string]: `${tilt}deg` }}
+                key={`${src}-${index}`}
+                className="animate-fan-in w-[19%] max-w-[14rem] min-w-0 origin-bottom"
+                style={{ animationDelay: `${260 + index * 80}ms` }}
               >
-                <ProductImage
-                  src={src}
-                  alt="AB Collection premium tee lookbook"
-                  width={440}
-                  height={586}
-                  sizes="(max-width: 640px) 20vw, 176px"
-                  priority={index < 3}
-                  className="aspect-[3/4] w-full object-cover object-top"
-                />
+                <div
+                  className="overflow-hidden rounded-xl bg-white shadow-[0_14px_32px_rgba(0,0,0,0.12)] transition-transform duration-500 [transform:rotate(calc(var(--tilt)*0.4))] hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.4))] sm:rounded-2xl sm:shadow-[0_18px_40px_rgba(0,0,0,0.12)] sm:[transform:rotate(calc(var(--tilt)*0.75))] sm:hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.75))]"
+                  style={{ ["--tilt" as string]: `${tilt}deg` }}
+                >
+                  <ProductImage
+                    src={src}
+                    alt="AB Collection premium tee lookbook"
+                    width={480}
+                    height={720}
+                    sizes="(max-width: 640px) 22vw, 224px"
+                    priority={index < 3}
+                    className="aspect-[2/3] h-auto w-full object-contain object-center"
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </section>
   );
