@@ -175,19 +175,27 @@ async function markResult(
   );
 }
 
-async function sendEmail(to: string, subject: string, text: string, html: string) {
+async function sendEmail(
+  to: string,
+  subject: string,
+  text: string,
+  html: string,
+  replyTo?: string,
+) {
   const key = process.env["RESEND_API_KEY"]?.trim();
   if (!key) {
     return { ok: false as const, error: "Email provider is not configured.", id: null };
   }
   const from = process.env["ORDER_NOTIFY_FROM"]?.trim() || `${SITE_NAME} <${SITE_EMAIL}>`;
+  const payload: Record<string, unknown> = { from, to: [to], subject, text, html };
+  if (replyTo?.trim()) payload["reply_to"] = replyTo.trim();
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to: [to], subject, text, html }),
+    body: JSON.stringify(payload),
   });
   const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
   if (!response.ok) {
@@ -235,6 +243,33 @@ async function sendWhatsApp(to: string, text: string) {
 }
 
 export async function notifyOrderEvent(order: Order, eventType: NotificationEventType) {
+  if (eventType === "order_placed") {
+    const itemLines = order.items
+      .map(
+        (item) =>
+          `${item.quantity} × ${item.productName} (${item.color}, ${item.size}) — ₹${item.lineTotal}`,
+      )
+      .join("\n");
+    await notifyStoreInquiry({
+      type: "order",
+      subject: `New order ${order.orderNumber} — ${order.customerName}`,
+      replyTo: order.customerEmail,
+      lines: [
+        `New store order ${order.orderNumber}`,
+        `Customer: ${order.customerName}`,
+        `Email: ${order.customerEmail}`,
+        `Phone: ${order.customerPhone}`,
+        `Address: ${order.addressLine1}${order.addressLine2 ? `, ${order.addressLine2}` : ""}`,
+        `${order.addressCity}, ${order.addressState} ${order.addressPincode}`,
+        `Total: ₹${order.totalAmount}`,
+        `Status: ${order.orderStatus} / ${order.paymentStatus}`,
+        "",
+        "Items:",
+        itemLines || "None",
+      ],
+    });
+  }
+
   if (notificationsDisabled()) return;
   const vars = notificationVars({
     customerName: order.customerName,
@@ -268,6 +303,27 @@ export async function notifyOrderEvent(order: Order, eventType: NotificationEven
       console.error("[notify]", eventType, channel, error);
     }
   }
+}
+
+export async function notifyStoreInquiry(input: {
+  type: string;
+  subject: string;
+  lines: string[];
+  replyTo?: string;
+}) {
+  const text = [`${SITE_NAME} website inquiry (${input.type})`, "", ...input.lines].join("\n");
+  const html = `<p style="font-family:Inter,Arial,sans-serif;white-space:pre-wrap">${text}
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\n", "<br/>")}</p>`;
+  const result = input.replyTo?.trim()
+    ? await sendEmail(SITE_EMAIL, input.subject, text, html, input.replyTo.trim())
+    : await sendEmail(SITE_EMAIL, input.subject, text, html);
+  if (!result.ok) {
+    console.error("[inquiry-mail]", input.type, result.error);
+  }
+  return result;
 }
 
 export async function notifyOrderChanges(previous: Order, next: Order) {

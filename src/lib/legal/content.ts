@@ -31,7 +31,7 @@ export const TERMS_DOCUMENT: LegalDocument = {
           "AB Collection is a direct-to-consumer clothing brand focused on premium everyday clothing and essentials.",
         ),
         p(
-          "For questions, support, orders, exchanges, or other customer-service matters, you may contact us at support@abcollection.co.in or +91 7489346362.",
+          "For questions, support, orders, exchanges, or other customer-service matters, you may contact us at abcollection.co.in@gmail.com or +91 7489346362.",
         ),
       ],
     },
@@ -543,7 +543,7 @@ export const SHIPPING_DOCUMENT: LegalDocument = {
       title: "8. Delivery Issues",
       blocks: [
         p(
-          "If you believe your order has been delivered incorrectly, has not arrived within a reasonable period after dispatch, or contains a delivery-related issue, contact us at support@abcollection.co.in or +91 7489346362.",
+          "If you believe your order has been delivered incorrectly, has not arrived within a reasonable period after dispatch, or contains a delivery-related issue, contact us at abcollection.co.in@gmail.com or +91 7489346362.",
         ),
         p("Please include your order details so that we can investigate the issue efficiently."),
       ],
@@ -716,7 +716,9 @@ export const RETURNS_DOCUMENT: LegalDocument = {
     {
       title: "11. How to Request an Exchange",
       blocks: [
-        p("To request an eligible exchange, contact support@abcollection.co.in or +91 7489346362."),
+        p(
+          "To request an eligible exchange, contact abcollection.co.in@gmail.com or +91 7489346362.",
+        ),
         p("Please provide:"),
         ul([
           "Order number",

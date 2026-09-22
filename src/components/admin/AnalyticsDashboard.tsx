@@ -217,7 +217,7 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
                   type="monotone"
                   dataKey="revenue"
                   name="Revenue"
-                  stroke="#0d9488"
+                  stroke="#B89A5A"
                   strokeWidth={2}
                 />
                 <Line
@@ -340,7 +340,7 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
                 <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="pageViews" name="Page views" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="pageViews" name="Page views" fill="#B89A5A" radius={[4, 4, 0, 0]} />
                 <Bar
                   dataKey="uniqueSessions"
                   name="Unique sessions"

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import type { Product } from "@/lib/catalog-types";
-import { SITE_LOCALE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
+import { SITE_EMAIL, SITE_LOCALE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 type PageSeoInput = {
   title: string;
@@ -67,7 +67,7 @@ export function organizationJsonLd() {
     name: SITE_NAME,
     url: SITE_URL,
     description: `${SITE_NAME} — ${SITE_TAGLINE}. Premium everyday essentials for men.`,
-    email: "abbasbadwahwala53@gmail.com",
+    email: SITE_EMAIL,
     sameAs: ["https://instagram.com/abcollection.co.in"],
     logo: absoluteUrl("/favicon.png"),
     brand: {

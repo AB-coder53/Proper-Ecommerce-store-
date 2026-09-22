@@ -4,7 +4,7 @@ import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 export const metadata = buildPageMetadata({
   title: "Contact",
   description:
-    "Contact AB Collection by email or Instagram for launch questions, sizing help, and reservation support.",
+    "Contact AB Collection by form, email, or Instagram for launch questions, sizing help, and order support.",
   path: "/contact",
 });
 

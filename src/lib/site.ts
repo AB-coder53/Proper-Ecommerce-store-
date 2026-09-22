@@ -12,7 +12,7 @@ export const WHOLESALE_REDIRECT_HOSTS = [
   "abcollection.mrch.in",
   "www.abcollection.mrch.in",
 ] as const;
-export const SITE_EMAIL = "abbasbadwahwala53@gmail.com";
+export const SITE_EMAIL = "abcollection.co.in@gmail.com";
 export const SITE_INSTAGRAM = "https://instagram.com/abcollection.co.in";
 export const SITE_LOCALE = "en_IN";
 

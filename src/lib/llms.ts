@@ -93,7 +93,7 @@ export function buildAiTxt(): string {
     `humans: ${canonicalUrl("/humans.txt")}`,
     "",
     "preferred-citation: AB Collection (abcollection.co.in)",
-    "contact: support@abcollection.co.in",
+    "contact: abcollection.co.in@gmail.com",
     "",
     "# Key pages",
     `home: ${canonicalUrl("/")}`,

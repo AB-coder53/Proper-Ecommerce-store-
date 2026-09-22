@@ -32,7 +32,7 @@
   }
   50% {
     opacity: 1;
-    text-shadow: 0 0 16px rgba(15, 118, 110, 0.45);
+    text-shadow: 0 0 12px rgba(184, 154, 90, 0.28);
   }
 }
 
@@ -40,11 +40,11 @@
   0%,
   100% {
     transform: scale(1);
-    background-color: rgba(15, 118, 110, 0.12);
+    background-color: rgba(184, 154, 90, 0.12);
   }
   50% {
     transform: scale(1.03);
-    background-color: rgba(15, 118, 110, 0.22);
+    background-color: rgba(184, 154, 90, 0.22);
   }
 }
 
@@ -92,9 +92,9 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(15, 118, 110, 0.1),
-    rgba(255, 255, 255, 0.16),
-    rgba(15, 118, 110, 0.1),
+    rgba(184, 154, 90, 0.12),
+    rgba(247, 244, 238, 0.2),
+    rgba(184, 154, 90, 0.12),
     transparent
   );
   animation: privilege-shimmer 5.5s ease-in-out infinite 1.2s;

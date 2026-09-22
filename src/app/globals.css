@@ -5,9 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * AB COLLECTION — MOTTO-inspired layout system.
- * White canvas, ink type, teal accent CTAs.
- * Playfair Display + Manrope.
+ * AB COLLECTION — brand cheat sheet
+ * AB Black #111111 · Charcoal #2B2B2B · Warm Ivory #F7F4EE
+ * Soft Cream #EDE7DC · Champagne Gold #B89A5A
+ * Cormorant Garamond (editorial) + Inter (UI / body)
  */
 
 @theme inline {
@@ -15,8 +16,8 @@
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 4px);
   --radius-xl: calc(var(--radius) + 10px);
-  --font-display: var(--font-playfair), "Playfair Display", Georgia, serif;
-  --font-sans: var(--font-manrope), "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+  --font-sans: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -44,38 +45,47 @@
   --color-ink-foreground: var(--ink-foreground);
   --color-teal: var(--teal);
   --color-teal-foreground: var(--teal-foreground);
+  --color-gold: var(--gold);
+  --color-cream: var(--soft-cream);
+  --color-ivory: var(--warm-ivory);
+  --color-charcoal: var(--charcoal);
   --tracking-luxe: 0.18em;
 }
 
 :root {
+  --ab-black: #111111;
+  --charcoal: #2b2b2b;
+  --warm-ivory: #f7f4ee;
+  --soft-cream: #ede7dc;
+  --gold: #b89a5a;
   --radius: 0.75rem;
-  --background: #ffffff;
+  --background: #f7f4ee;
   --foreground: #111111;
-  --card: #ffffff;
+  --card: #f7f4ee;
   --card-foreground: #111111;
-  --popover: #ffffff;
+  --popover: #f7f4ee;
   --popover-foreground: #111111;
-  --primary: #0f766e;
-  --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
+  --primary: #b89a5a;
+  --primary-foreground: #111111;
+  --secondary: #ede7dc;
   --secondary-foreground: #111111;
-  --muted: #f5f5f5;
-  --muted-foreground: #6b7280;
-  --accent: #ecfdf5;
-  --accent-foreground: #0f766e;
+  --muted: #ede7dc;
+  --muted-foreground: color-mix(in srgb, #2b2b2b 68%, #f7f4ee);
+  --accent: #ede7dc;
+  --accent-foreground: #b89a5a;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #0f766e;
-  --sand: #f8faf9;
+  --border: #e0d8cc;
+  --input: #e0d8cc;
+  --ring: #b89a5a;
+  --sand: #ede7dc;
   --sand-foreground: #111111;
-  --olive: #0f766e;
-  --olive-foreground: #ffffff;
-  --ink: #0a0a0a;
-  --ink-foreground: #ffffff;
-  --teal: #0f766e;
-  --teal-foreground: #ffffff;
+  --olive: #b89a5a;
+  --olive-foreground: #111111;
+  --ink: #111111;
+  --ink-foreground: #f7f4ee;
+  --teal: #b89a5a;
+  --teal-foreground: #111111;
 }
 
 @layer base {
@@ -101,7 +111,7 @@
   h4,
   blockquote {
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.02em;
   }
 }

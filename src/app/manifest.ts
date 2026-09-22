@@ -9,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: `${SITE_TAGLINE}. Premium heavyweight cotton tees for men.`,
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#0d9488",
+    background_color: "#f7f4ee",
+    theme_color: "#111111",
     lang: "en-IN",
     categories: ["shopping", "fashion"],
     icons: [

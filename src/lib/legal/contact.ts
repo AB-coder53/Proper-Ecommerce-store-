@@ -1,6 +1,6 @@
 export const LEGAL_CONTACT = {
   brand: "AB Collection",
-  email: "support@abcollection.co.in",
+  email: "abcollection.co.in@gmail.com",
   phone: "+91 7489346362",
 } as const;
 

@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import { notifyStoreInquiry } from "@/lib/notifications.server";
 import { createReservation, reservationSchema } from "@/lib/reservations";
 
 export async function POST(request: Request) {
@@ -8,6 +9,26 @@ export async function POST(request: Request) {
     const body: unknown = await request.json();
     const data = reservationSchema.parse(body);
     const result = await createReservation(data);
+    const replyTo = data.email?.trim();
+    after(() => {
+      void notifyStoreInquiry({
+        type: "reservation",
+        subject: `Reservation ${result.reservationId ?? "inquiry"} — ${data.fullName}`,
+        ...(replyTo ? { replyTo } : {}),
+        lines: [
+          `Status: ${result.status}`,
+          `Reservation ID: ${result.reservationId ?? "n/a"}`,
+          `Name: ${data.fullName}`,
+          `Mobile: ${data.mobile}`,
+          `Email: ${data.email || "n/a"}`,
+          `City: ${data.city || "n/a"}`,
+          `WhatsApp opt-in: ${data.whatsappOptIn ? "Yes" : "No"}`,
+          "",
+          "Items:",
+          ...data.items.map((item) => `- ${item.productName} · ${item.colour} · ${item.size}`),
+        ],
+      });
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof ZodError) {
