@@ -13,7 +13,7 @@ import {
   type NotificationEventType,
   type OrderNotification,
 } from "@/lib/notifications";
-import { SITE_EMAIL, SITE_NAME } from "@/lib/site";
+import { SITE_EMAIL, SITE_NAME, SITE_URL } from "@/lib/site";
 import { isMissingTableError } from "@/lib/store-config.shared";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -182,11 +182,26 @@ async function sendEmail(
   html: string,
   replyTo?: string,
 ) {
+  const resend = await sendEmailViaResend(to, subject, text, html, replyTo);
+  if (resend.ok) return resend;
+  const fallback = await sendEmailViaFormSubmit(to, subject, text, replyTo);
+  if (fallback.ok) return fallback;
+  return resend.error ? resend : fallback;
+}
+
+async function sendEmailViaResend(
+  to: string,
+  subject: string,
+  text: string,
+  html: string,
+  replyTo?: string,
+) {
   const key = process.env["RESEND_API_KEY"]?.trim();
   if (!key) {
     return { ok: false as const, error: "Email provider is not configured.", id: null };
   }
-  const from = process.env["ORDER_NOTIFY_FROM"]?.trim() || `${SITE_NAME} <${SITE_EMAIL}>`;
+  const from =
+    process.env["ORDER_NOTIFY_FROM"]?.trim() || `${SITE_NAME} <noreply@abcollection.co.in>`;
   const payload: Record<string, unknown> = { from, to: [to], subject, text, html };
   if (replyTo?.trim()) payload["reply_to"] = replyTo.trim();
   const response = await fetch("https://api.resend.com/emails", {
@@ -206,6 +221,46 @@ async function sendEmail(
     };
   }
   return { ok: true as const, error: null, id: body.id ?? null };
+}
+
+async function sendEmailViaFormSubmit(to: string, subject: string, text: string, replyTo?: string) {
+  const payload: Record<string, string> = {
+    _subject: subject,
+    _template: "box",
+    _captcha: "false",
+    message: text,
+  };
+  if (replyTo?.trim()) {
+    payload["_replyto"] = replyTo.trim();
+    payload["email"] = replyTo.trim();
+  }
+  const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(to)}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Origin: SITE_URL,
+      Referer: `${SITE_URL}/contact`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    success?: string | boolean;
+    message?: string;
+  };
+  const ok =
+    response.ok &&
+    (body.success === true ||
+      body.success === "true" ||
+      /confirm|activat|sent|thank/i.test(body.message ?? ""));
+  if (!ok) {
+    return {
+      ok: false as const,
+      error: body.message || `Email send failed (${response.status}).`,
+      id: null,
+    };
+  }
+  return { ok: true as const, error: null, id: "formsubmit" };
 }
 
 async function sendWhatsApp(to: string, text: string) {
@@ -312,7 +367,7 @@ export async function notifyStoreInquiry(input: {
   replyTo?: string;
 }) {
   const text = [`${SITE_NAME} website inquiry (${input.type})`, "", ...input.lines].join("\n");
-  const html = `<p style="font-family:Inter,Arial,sans-serif;white-space:pre-wrap">${text}
+  const html = `<p style="font-family:Inter,Arial,sans-serif;white-space:pre-wrap">${text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

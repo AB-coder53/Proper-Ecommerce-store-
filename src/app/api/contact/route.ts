@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z, ZodError } from "zod";
 
+import { saveContactInquiry } from "@/lib/contact-inquiries.server";
 import { notifyStoreInquiry } from "@/lib/notifications.server";
 
 const contactSchema = z.object({
@@ -13,7 +14,14 @@ const contactSchema = z.object({
 export async function POST(request: Request) {
   try {
     const data = contactSchema.parse(await request.json());
-    const result = await notifyStoreInquiry({
+    const phone = data.phone?.trim() || undefined;
+    const saved = await saveContactInquiry({
+      name: data.name,
+      email: data.email,
+      ...(phone ? { phone } : {}),
+      message: data.message,
+    });
+    const emailed = await notifyStoreInquiry({
       type: "contact",
       subject: `Contact form — ${data.name}`,
       replyTo: data.email,
@@ -26,7 +34,7 @@ export async function POST(request: Request) {
         data.message,
       ],
     });
-    if (!result.ok) {
+    if (!saved && !emailed.ok) {
       return NextResponse.json(
         { error: "We couldn't send your message right now. Please email us directly." },
         { status: 503 },
