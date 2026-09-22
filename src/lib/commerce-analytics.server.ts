@@ -9,7 +9,11 @@ import type { CommerceAnalytics } from "@/lib/analytics.types";
 
 const EXCLUDED = new Set(["cancelled", "failed", "returned"]);
 
-export async function getCommerceAnalytics(from: Date, to: Date, previousFrom: Date): Promise<CommerceAnalytics> {
+export async function getCommerceAnalytics(
+  from: Date,
+  to: Date,
+  previousFrom: Date,
+): Promise<CommerceAnalytics> {
   const [orders, products, redemptions] = await Promise.all([
     listAllOrders(),
     getProducts(),

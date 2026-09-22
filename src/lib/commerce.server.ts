@@ -166,7 +166,10 @@ function isUniqueConstraintError(error: unknown) {
   return err.code === "23505" || /duplicate key|checkout_id/i.test(err.message ?? "");
 }
 
-async function findOrderByCheckoutId(customerId: string, checkoutId: string): Promise<Order | null> {
+async function findOrderByCheckoutId(
+  customerId: string,
+  checkoutId: string,
+): Promise<Order | null> {
   const order = await withDbOrFile(
     async () => {
       const sb = getCommerceDb();
@@ -186,8 +189,9 @@ async function findOrderByCheckoutId(customerId: string, checkoutId: string): Pr
     async () => {
       const store = await readFileStore();
       return (
-        store.orders.find((row) => row.customerId === customerId && row.checkoutId === checkoutId) ??
-        null
+        store.orders.find(
+          (row) => row.customerId === customerId && row.checkoutId === checkoutId,
+        ) ?? null
       );
     },
   );
@@ -567,9 +571,7 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
   }
   const existingLine = currentCart.find(
     (line) =>
-      line.productId === input.productId &&
-      line.size === input.size &&
-      line.color === input.color,
+      line.productId === input.productId && line.size === input.size && line.color === input.color,
   );
   const existingQty = existingLine?.quantity ?? 0;
   const cap = Math.min(CART_MAX_QUANTITY, variant.stock);
@@ -1056,17 +1058,16 @@ async function createPlacedOrder(
     customerId: customer.id,
     lines,
   });
-  if (
-    !couponQuote.ok &&
-    input.promoCode?.trim().toUpperCase() === ISTEFADA_PROMO_CODE
-  ) {
+  if (!couponQuote.ok && input.promoCode?.trim().toUpperCase() === ISTEFADA_PROMO_CODE) {
     const fallback = resolveIstefadaDiscount(input.promoCode, lines);
     if (fallback > 0) {
       couponQuote = { ok: true, code: ISTEFADA_PROMO_CODE, discount: fallback };
     }
   }
   if (input.promoCode?.trim() && !couponQuote.ok) {
-    throw Object.assign(new Error(couponQuote.error || "This coupon is not valid."), { status: 409 });
+    throw Object.assign(new Error(couponQuote.error || "This coupon is not valid."), {
+      status: 409,
+    });
   }
   const bundleMatch = bestApplicableBundle(
     await getBundleOffers(),
@@ -1184,7 +1185,7 @@ async function createPlacedOrder(
         };
         let { error: orderError } = await sb.from("orders").insert(orderPayload);
         if (orderError && /checkout_id/i.test(orderError.message ?? "")) {
-          delete orderPayload.checkout_id;
+          delete orderPayload["checkout_id"];
           ({ error: orderError } = await sb.from("orders").insert(orderPayload));
         }
         if (orderError) throw orderError;
@@ -1211,7 +1212,9 @@ async function createPlacedOrder(
         const store = await readFileStore();
         if (
           checkoutId &&
-          store.orders.some((row) => row.customerId === customer.id && row.checkoutId === checkoutId)
+          store.orders.some(
+            (row) => row.customerId === customer.id && row.checkoutId === checkoutId,
+          )
         ) {
           throw Object.assign(new Error("duplicate key checkout_id"), { code: "23505" });
         }
@@ -1408,10 +1411,15 @@ export async function updateOrderStatus(
   const now = new Date().toISOString();
   const paymentStatus = extras?.paymentStatus?.trim() || existing.paymentStatus;
   const trackingNumber =
-    extras?.trackingNumber === undefined ? existing.trackingNumber ?? null : extras.trackingNumber.trim() || null;
-  const carrier = extras?.carrier === undefined ? existing.carrier ?? null : extras.carrier.trim() || null;
+    extras?.trackingNumber === undefined
+      ? (existing.trackingNumber ?? null)
+      : extras.trackingNumber.trim() || null;
+  const carrier =
+    extras?.carrier === undefined ? (existing.carrier ?? null) : extras.carrier.trim() || null;
   const trackingUrl =
-    extras?.trackingUrl === undefined ? existing.trackingUrl ?? null : extras.trackingUrl.trim() || null;
+    extras?.trackingUrl === undefined
+      ? (existing.trackingUrl ?? null)
+      : extras.trackingUrl.trim() || null;
   let inventoryState = existing.inventoryState ?? "none";
   if (RELEASE_ORDER_STATUSES.has(orderStatus) && inventoryState === "deducted") {
     await restoreOrderInventory(

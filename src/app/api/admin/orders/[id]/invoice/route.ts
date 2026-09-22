@@ -29,6 +29,9 @@ export async function GET(request: Request, ctx: Ctx) {
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: err.message || "Could not generate invoice." }, { status: err.status ?? 500 });
+    return NextResponse.json(
+      { error: err.message || "Could not generate invoice." },
+      { status: err.status ?? 500 },
+    );
   }
 }

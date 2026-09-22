@@ -21,7 +21,13 @@ export type AnalyticsSummary = {
   topPages: { path: string; views: number; uniqueSessions: number }[];
   topReferrers: { source: string; sessions: number }[];
   topClicks: { name: string; target: string; count: number }[];
-  daily: { date: string; pageViews: number; uniqueSessions: number; revenue?: number; orders?: number }[];
+  daily: {
+    date: string;
+    pageViews: number;
+    uniqueSessions: number;
+    revenue?: number;
+    orders?: number;
+  }[];
   recentEvents: AnalyticsEventRow[];
   devices?: { label: string; sessions: number }[];
   commerce?: CommerceAnalytics;

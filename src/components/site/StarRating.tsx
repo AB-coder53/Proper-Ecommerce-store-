@@ -11,7 +11,11 @@ export function StarRating({
 }) {
   const interactive = Boolean(onChange);
   return (
-    <div className="inline-flex items-center gap-0.5" role={interactive ? "radiogroup" : "img"} aria-label={`${value} out of 5 stars`}>
+    <div
+      className="inline-flex items-center gap-0.5"
+      role={interactive ? "radiogroup" : "img"}
+      aria-label={`${value} out of 5 stars`}
+    >
       {[1, 2, 3, 4, 5].map((star) => {
         const filled = star <= value;
         const className = cn(
@@ -32,7 +36,10 @@ export function StarRating({
             role="radio"
             aria-checked={star === value}
             aria-label={`${star} star${star === 1 ? "" : "s"}`}
-            className={cn(className, "inline-flex size-11 items-center justify-center leading-none")}
+            className={cn(
+              className,
+              "inline-flex size-11 items-center justify-center leading-none",
+            )}
             onClick={() => onChange?.(star)}
           >
             ★

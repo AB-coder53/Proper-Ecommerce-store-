@@ -38,9 +38,14 @@ function mapRow(row: BundleRow): BundleOffer {
     title: row.title,
     productIds: row.product_ids ?? [],
     showOnProductIds: row.show_on_product_ids ?? [],
-    pricingType: (row as BundleRow & { pricing_type?: string }).pricing_type === "percent" ? "percent" : "fixed",
+    pricingType:
+      (row as BundleRow & { pricing_type?: string }).pricing_type === "percent"
+        ? "percent"
+        : "fixed",
     bundlePrice: row.bundle_price,
-    discountPercent: Number((row as BundleRow & { discount_percent?: number }).discount_percent ?? 0),
+    discountPercent: Number(
+      (row as BundleRow & { discount_percent?: number }).discount_percent ?? 0,
+    ),
     startsAt: row.starts_at ?? "",
     endsAt: row.ends_at ?? "",
     active: row.active,
@@ -184,10 +189,7 @@ export async function saveBundleOffer(offer: BundleOffer, mode: "create" | "upda
         title: payload.title,
         product_ids: payload.product_ids,
         show_on_product_ids: payload.show_on_product_ids,
-        bundle_price:
-          parsed.pricingType === "percent"
-            ? 0
-            : payload.bundle_price,
+        bundle_price: parsed.pricingType === "percent" ? 0 : payload.bundle_price,
         starts_at: payload.starts_at,
         ends_at: payload.ends_at,
         active: payload.active,
@@ -196,8 +198,17 @@ export async function saveBundleOffer(offer: BundleOffer, mode: "create" | "upda
       };
       const retry =
         mode === "create"
-          ? supabase.from("bundle_offers" as never).insert(fallbackPayload as never).select("*").single()
-          : supabase.from("bundle_offers" as never).update(fallbackPayload as never).eq("id", parsed.id).select("*").single();
+          ? supabase
+              .from("bundle_offers" as never)
+              .insert(fallbackPayload as never)
+              .select("*")
+              .single()
+          : supabase
+              .from("bundle_offers" as never)
+              .update(fallbackPayload as never)
+              .eq("id", parsed.id)
+              .select("*")
+              .single();
       const retried = (await retry) as {
         data: BundleRow | null;
         error: { message: string } | null;

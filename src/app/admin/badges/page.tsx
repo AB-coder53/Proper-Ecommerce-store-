@@ -75,7 +75,10 @@ export default function AdminBadgesPage() {
         Create labels and assign them on product pages. Sold Out is still driven by live inventory.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-8 grid gap-4 rounded-3xl border border-border bg-white p-6 sm:grid-cols-2">
+      <form
+        onSubmit={onSubmit}
+        className="mt-8 grid gap-4 rounded-3xl border border-border bg-white p-6 sm:grid-cols-2"
+      >
         <label className="space-y-2 text-sm">
           <span className="font-medium">ID</span>
           <input
@@ -108,7 +111,9 @@ export default function AdminBadgesPage() {
           <span className="font-medium">Tone</span>
           <select
             value={form.tone}
-            onChange={(event) => setForm((prev) => ({ ...prev, tone: event.target.value as ProductBadge["tone"] }))}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, tone: event.target.value as ProductBadge["tone"] }))
+            }
             className="h-11 w-full rounded-xl border border-border px-3"
           >
             <option value="default">Default</option>
@@ -139,11 +144,15 @@ export default function AdminBadgesPage() {
         ) : badges.length ? (
           badges.map((badge) => (
             <div key={badge.id} className="rounded-3xl border border-border bg-white p-5">
-              <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${badgeToneClass(badge.tone)}`}>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold uppercase ${badgeToneClass(badge.tone)}`}
+              >
                 {badge.label}
               </span>
               <p className="mt-3 font-medium">{badge.name}</p>
-              <p className="text-xs text-muted-foreground">{badge.active ? "Active" : "Inactive"}</p>
+              <p className="text-xs text-muted-foreground">
+                {badge.active ? "Active" : "Inactive"}
+              </p>
               <div className="mt-4 flex gap-3 text-sm">
                 <button className="font-semibold text-teal" onClick={() => setForm(badge)}>
                   Edit

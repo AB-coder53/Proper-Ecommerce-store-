@@ -39,12 +39,7 @@ export function CatalogPrice({
           {strikeLabel}
         </p>
       ) : null}
-      <p
-        className={cn(
-          "font-semibold text-teal",
-          size === "detail" ? "text-2xl" : "text-sm",
-        )}
-      >
+      <p className={cn("font-semibold text-teal", size === "detail" ? "text-2xl" : "text-sm")}>
         <span className="sr-only">Selling price </span>
         {currentLabel}
       </p>

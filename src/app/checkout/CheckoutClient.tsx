@@ -148,7 +148,12 @@ export default function CheckoutClient() {
       };
       setCouponQuote(data);
     } catch {
-      setCouponQuote({ ok: false, code: couponInput, discount: 0, error: "Could not validate coupon." });
+      setCouponQuote({
+        ok: false,
+        code: couponInput,
+        discount: 0,
+        error: "Could not validate coupon.",
+      });
     } finally {
       setCouponBusy(false);
     }
@@ -161,9 +166,7 @@ export default function CheckoutClient() {
   }> => {
     const [catalogRes, cartRes] = await Promise.all([
       fetch("/api/catalog?live=1", { cache: "no-store" }),
-      customer && mode !== "buy_now"
-        ? fetch("/api/customer/cart")
-        : Promise.resolve(null),
+      customer && mode !== "buy_now" ? fetch("/api/customer/cart") : Promise.resolve(null),
     ]);
     const catalogData = catalogRes.ok
       ? ((await catalogRes.json()) as { products?: Product[] })
@@ -341,7 +344,10 @@ export default function CheckoutClient() {
         Confirm your details and delivery address to place the order.
       </p>
 
-      <form onSubmit={submit} className="mt-10 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <form
+        onSubmit={submit}
+        className="mt-10 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"
+      >
         <div className="min-w-0 space-y-8">
           <section className="min-w-0 rounded-3xl border border-border p-4 sm:p-6">
             <h2 className="font-display text-2xl font-bold">Customer details</h2>
@@ -533,7 +539,9 @@ export default function CheckoutClient() {
               </Button>
             </div>
             {couponQuote && !couponQuote.ok ? (
-              <p className="text-xs text-destructive">{couponQuote.error || "This coupon is not valid."}</p>
+              <p className="text-xs text-destructive">
+                {couponQuote.error || "This coupon is not valid."}
+              </p>
             ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>

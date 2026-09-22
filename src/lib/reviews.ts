@@ -59,11 +59,14 @@ export type ReviewEligibility = {
 };
 
 export function sanitizeReviewText(value: string) {
-  return value
-    .replace(/<[^>]*>/g, " ")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const withoutTags = value.replace(/<[^>]*>/g, " ");
+  const withoutControls = [...withoutTags]
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code === 9 || code === 10 || code === 13 || code >= 32;
+    })
+    .join("");
+  return withoutControls.replace(/\s+/g, " ").trim();
 }
 
 export function publicReviewerName(fullName: string) {

@@ -184,7 +184,9 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
                     }}
                   />
                   {badge.label}
-                  {!badge.active ? <span className="text-xs text-muted-foreground">(inactive)</span> : null}
+                  {!badge.active ? (
+                    <span className="text-xs text-muted-foreground">(inactive)</span>
+                  ) : null}
                 </label>
               );
             })}

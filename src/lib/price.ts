@@ -10,10 +10,7 @@ export function formatInr(amount: number): string {
   return `₹${Math.max(0, Math.round(amount)).toLocaleString("en-IN")}`;
 }
 
-export function catalogPriceParts(product: {
-  price: string;
-  compareAtPrice?: string | undefined;
-}) {
+export function catalogPriceParts(product: { price: string; compareAtPrice?: string | undefined }) {
   const selling = parsePriceInr(product.price);
   const compareAt = parsePriceInr(product.compareAtPrice);
   const hasCompare = compareAt > selling && selling > 0;

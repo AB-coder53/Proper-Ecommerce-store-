@@ -38,7 +38,10 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
         href={`/collection/${product.id}`}
         className="relative overflow-hidden rounded-2xl bg-muted"
       >
-        <ProductBadgeList product={product} className="absolute top-3 right-3 z-10 max-w-[75%] justify-end" />
+        <ProductBadgeList
+          product={product}
+          className="absolute top-3 right-3 z-10 max-w-[75%] justify-end"
+        />
         <ProductImage
           src={product.image}
           alt={`${product.name} — ${product.fabric}`}

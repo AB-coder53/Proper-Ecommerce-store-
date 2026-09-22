@@ -75,12 +75,15 @@ function mapRow(row: Record<string, unknown>): OrderNotification {
   return {
     id: String(row["id"]),
     orderId: String(row["order_id"] ?? row["orderId"]),
-    customerId: (row["customer_id"] as string | null) ?? (row["customerId"] as string | null) ?? null,
+    customerId:
+      (row["customer_id"] as string | null) ?? (row["customerId"] as string | null) ?? null,
     eventType: String(row["event_type"] ?? row["eventType"]),
     channel: String(row["channel"]),
     status: String(row["status"]),
     providerMessageId:
-      (row["provider_message_id"] as string | null) ?? (row["providerMessageId"] as string | null) ?? null,
+      (row["provider_message_id"] as string | null) ??
+      (row["providerMessageId"] as string | null) ??
+      null,
     error: (row["error"] as string | null) ?? null,
     sentAt: (row["sent_at"] as string | null) ?? (row["sentAt"] as string | null) ?? null,
     createdAt: String(row["created_at"] ?? row["createdAt"]),
@@ -128,7 +131,8 @@ async function claimSlot(
       const store = await readStore();
       if (
         store.notifications.some(
-          (row) => row.orderId === order.id && row.eventType === eventType && row.channel === channel,
+          (row) =>
+            row.orderId === order.id && row.eventType === eventType && row.channel === channel,
         )
       ) {
         return null;
@@ -187,7 +191,11 @@ async function sendEmail(to: string, subject: string, text: string, html: string
   });
   const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
   if (!response.ok) {
-    return { ok: false as const, error: body.message || `Email send failed (${response.status}).`, id: null };
+    return {
+      ok: false as const,
+      error: body.message || `Email send failed (${response.status}).`,
+      id: null,
+    };
   }
   return { ok: true as const, error: null, id: body.id ?? null };
 }
@@ -217,7 +225,11 @@ async function sendWhatsApp(to: string, text: string) {
     error?: { message?: string };
   };
   if (!response.ok) {
-    return { ok: false as const, error: body.error?.message || `WhatsApp send failed (${response.status}).`, id: null };
+    return {
+      ok: false as const,
+      error: body.error?.message || `WhatsApp send failed (${response.status}).`,
+      id: null,
+    };
   }
   return { ok: true as const, error: null, id: body.messages?.[0]?.id ?? null };
 }
@@ -269,7 +281,11 @@ export async function notifyOrderChanges(previous: Order, next: Order) {
     }
     const trackingBecameAvailable =
       !previous.trackingNumber?.trim() && Boolean(next.trackingNumber?.trim());
-    if (trackingBecameAvailable && previous.orderStatus === "shipped" && next.orderStatus === "shipped") {
+    if (
+      trackingBecameAvailable &&
+      previous.orderStatus === "shipped" &&
+      next.orderStatus === "shipped"
+    ) {
       await notifyOrderEvent(next, "tracking_available");
     }
   } catch (error) {

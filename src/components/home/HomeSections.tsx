@@ -109,14 +109,14 @@ export function HomeDiscover({ collections }: { collections: Collection[] }) {
                 className={`${category.tint} overflow-hidden rounded-[1.75rem] p-4 pb-5 shadow-sm`}
               >
                 <Link href={href} className="block overflow-hidden rounded-[1.25rem] bg-white/40">
-                <ProductImage
-                  src={category.image}
-                  alt={`${category.title} tees from AB Collection`}
-                  width={640}
-                  height={800}
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
-                />
+                  <ProductImage
+                    src={category.image}
+                    alt={`${category.title} tees from AB Collection`}
+                    width={640}
+                    height={800}
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
+                  />
                 </Link>
                 <Button
                   asChild
@@ -210,7 +210,14 @@ export function HomeCommunity({ products }: { products: Product[] }) {
           } ${positions[index]}`}
           style={{ animationDelay: `${index * 0.35}s` }}
         >
-          <ProductImage src={src} alt="" width={160} height={160} sizes="80px" className="h-full w-full object-cover object-top" />
+          <ProductImage
+            src={src}
+            alt=""
+            width={160}
+            height={160}
+            sizes="80px"
+            className="h-full w-full object-cover object-top"
+          />
         </div>
       ))}
 

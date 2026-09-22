@@ -21,7 +21,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: err.message || "Could not update review." }, { status: err.status ?? 400 });
+    return NextResponse.json(
+      { error: err.message || "Could not update review." },
+      { status: err.status ?? 400 },
+    );
   }
 }
 
@@ -36,6 +39,9 @@ export async function DELETE(_: Request, ctx: Ctx) {
     if (err.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return NextResponse.json({ error: err.message || "Could not delete review." }, { status: err.status ?? 400 });
+    return NextResponse.json(
+      { error: err.message || "Could not delete review." },
+      { status: err.status ?? 400 },
+    );
   }
 }

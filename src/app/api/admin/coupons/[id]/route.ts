@@ -21,7 +21,10 @@ export async function PUT(request: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (error instanceof ZodError) {
-      return NextResponse.json({ error: error.issues[0]?.message ?? "Invalid coupon" }, { status: 400 });
+      return NextResponse.json(
+        { error: error.issues[0]?.message ?? "Invalid coupon" },
+        { status: 400 },
+      );
     }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not save coupon" },

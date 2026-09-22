@@ -31,7 +31,11 @@ export async function POST(request: Request) {
     return NextResponse.json(quote, { status: quote.ok ? 200 : 409 });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, discount: 0, error: error instanceof Error ? error.message : "Could not validate coupon." },
+      {
+        ok: false,
+        discount: 0,
+        error: error instanceof Error ? error.message : "Could not validate coupon.",
+      },
       { status: 400 },
     );
   }

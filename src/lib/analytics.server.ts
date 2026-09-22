@@ -309,10 +309,7 @@ export async function getAnalyticsSummary(
   for (const row of rows) {
     if (row.event_type === "page_view" && /^\/collection\/.+/.test(row.path)) productViews += 1;
     if (row.event_type === "page_view" && row.path.startsWith("/checkout")) checkoutStarted += 1;
-    if (
-      row.event_type === "click" &&
-      /add to cart|added/i.test(row.event_name ?? "")
-    ) {
+    if (row.event_type === "click" && /add to cart|added/i.test(row.event_name ?? "")) {
       addToCart += 1;
     }
   }

@@ -70,7 +70,16 @@ export async function exportCustomersCsv() {
 export async function exportProductsCsv() {
   const products = await getProducts();
   return toCsv(
-    ["product_id", "name", "sku", "category", "price", "compare_at_price", "status", "created_date"],
+    [
+      "product_id",
+      "name",
+      "sku",
+      "category",
+      "price",
+      "compare_at_price",
+      "status",
+      "created_date",
+    ],
     products.map((product) => [
       product.id,
       product.name,
@@ -97,7 +106,11 @@ export async function exportInventoryCsv() {
       variant.color,
       variant.size,
       variant.stock,
-      variant.stock <= 0 ? "out_of_stock" : variant.stock <= LOW_STOCK_THRESHOLD ? "low_stock" : "in_stock",
+      variant.stock <= 0
+        ? "out_of_stock"
+        : variant.stock <= LOW_STOCK_THRESHOLD
+          ? "low_stock"
+          : "in_stock",
     ]),
   );
 }

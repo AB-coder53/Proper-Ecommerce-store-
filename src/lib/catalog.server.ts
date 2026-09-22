@@ -146,7 +146,10 @@ async function readSupabaseCatalog(): Promise<Catalog> {
     products: (productsRes.data ?? []).map(mapProduct),
     collections: (collectionsRes.data ?? []).map(mapCollection),
   };
-  return { ...catalog, products: await attachProductBadges(await attachInventory(catalog.products)) };
+  return {
+    ...catalog,
+    products: await attachProductBadges(await attachInventory(catalog.products)),
+  };
 }
 
 async function resolveCatalog(): Promise<Catalog> {

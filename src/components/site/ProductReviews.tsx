@@ -130,7 +130,9 @@ export function ProductReviews({
             <Button
               type="button"
               className="mt-3 h-11 rounded-full bg-teal px-5 text-xs tracking-[0.1em] text-teal-foreground uppercase"
-              onClick={() => openAuth({ type: "generic", redirect: `/collection/${productId}#reviews` })}
+              onClick={() =>
+                openAuth({ type: "generic", redirect: `/collection/${productId}#reviews` })
+              }
             >
               Login / Signup
             </Button>

@@ -10,7 +10,10 @@ export function productDisplayBadges(product: Product): ProductBadge[] {
     if (badge.id === "sold-out" || /sold\s*out/i.test(badge.label)) return soldOut;
     return true;
   });
-  if (soldOut && !assigned.some((badge) => badge.id === "sold-out" || /sold\s*out/i.test(badge.label))) {
+  if (
+    soldOut &&
+    !assigned.some((badge) => badge.id === "sold-out" || /sold\s*out/i.test(badge.label))
+  ) {
     assigned.push({
       id: "sold-out",
       name: "Sold Out",

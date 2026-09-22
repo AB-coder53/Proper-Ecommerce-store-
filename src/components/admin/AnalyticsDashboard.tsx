@@ -30,8 +30,10 @@ function rangeFor(key: PeriodKey, customFrom: string, customTo: string) {
   const now = new Date();
   const today = isoDate(now);
   if (key === "today") return { from: today, to: today, days: 1 };
-  if (key === "7") return { from: isoDate(new Date(now.getTime() - 6 * 86400000)), to: today, days: 7 };
-  if (key === "30") return { from: isoDate(new Date(now.getTime() - 29 * 86400000)), to: today, days: 30 };
+  if (key === "7")
+    return { from: isoDate(new Date(now.getTime() - 6 * 86400000)), to: today, days: 7 };
+  if (key === "30")
+    return { from: isoDate(new Date(now.getTime() - 29 * 86400000)), to: today, days: 30 };
   if (key === "month") {
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
     return { from: isoDate(from), to: today, days: now.getDate() };
@@ -188,9 +190,7 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
         />
         <StatCard
           label="Conversion rate"
-          value={
-            commerce?.conversionRate == null ? "—" : `${commerce.conversionRate}%`
-          }
+          value={commerce?.conversionRate == null ? "—" : `${commerce.conversionRate}%`}
           hint={
             commerce?.conversionRate == null
               ? "Needs session traffic data"
@@ -213,8 +213,20 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
                 <YAxis tickLine={false} axisLine={false} fontSize={12} />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#0d9488" strokeWidth={2} />
-                <Line type="monotone" dataKey="orders" name="Orders" stroke="#64748b" strokeWidth={2} />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Revenue"
+                  stroke="#0d9488"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="orders"
+                  name="Orders"
+                  stroke="#64748b"
+                  strokeWidth={2}
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -230,14 +242,21 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
           title="Top products"
           description="Units sold and product revenue from completed orders."
           headers={["Product", "Units", "Revenue"]}
-          rows={(commerce?.topProducts ?? []).map((row) => [row.name, row.units, formatInr(row.revenue)])}
+          rows={(commerce?.topProducts ?? []).map((row) => [
+            row.name,
+            row.units,
+            formatInr(row.revenue),
+          ])}
           empty="No product sales in this period."
         />
         <DataTable
           title="Low stock"
           description={`Variants at or below the configured threshold. ${commerce?.outOfStock ?? 0} out of stock · ${commerce?.totalUnits ?? 0} units on hand.`}
           headers={["Variant", "Stock"]}
-          rows={(commerce?.lowStock ?? []).map((row) => [`${row.product} · ${row.color} / ${row.size}`, row.stock])}
+          rows={(commerce?.lowStock ?? []).map((row) => [
+            `${row.product} · ${row.color} / ${row.size}`,
+            row.stock,
+          ])}
           empty="No low-stock products."
         />
       </div>
@@ -247,14 +266,22 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
           title="Sales by colour"
           description="Units sold using order variant colours."
           headers={["Colour", "Units", "Revenue"]}
-          rows={(commerce?.colours ?? []).map((row) => [row.label, row.units, formatInr(row.revenue)])}
+          rows={(commerce?.colours ?? []).map((row) => [
+            row.label,
+            row.units,
+            formatInr(row.revenue),
+          ])}
           empty="No colour variant sales in this period."
         />
         <DataTable
           title="Sales by size"
           description="Units sold using order variant sizes."
           headers={["Size", "Units", "Revenue"]}
-          rows={(commerce?.sizes ?? []).map((row) => [row.label, row.units, formatInr(row.revenue)])}
+          rows={(commerce?.sizes ?? []).map((row) => [
+            row.label,
+            row.units,
+            formatInr(row.revenue),
+          ])}
           empty="No size variant sales in this period."
         />
       </div>
@@ -264,7 +291,11 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
           title="Coupon performance"
           description="Usage counted only on confirmed orders."
           headers={["Coupon", "Usage", "Discount"]}
-          rows={(commerce?.coupons ?? []).map((row) => [row.code, row.usage, formatInr(row.discount)])}
+          rows={(commerce?.coupons ?? []).map((row) => [
+            row.code,
+            row.usage,
+            formatInr(row.discount),
+          ])}
           empty="No coupon usage in this period."
         />
         <section className="rounded-3xl border border-border bg-white p-6">
@@ -272,7 +303,11 @@ export function AnalyticsDashboard({ initial }: { initial: AnalyticsSummary }) {
           <p className="mt-1 text-sm text-muted-foreground">
             From storefront events already tracked on this site.
           </p>
-          {commerce && (commerce.productViews || commerce.addToCart || commerce.checkoutStarted || commerce.orders) ? (
+          {commerce &&
+          (commerce.productViews ||
+            commerce.addToCart ||
+            commerce.checkoutStarted ||
+            commerce.orders) ? (
             <dl className="mt-4 grid gap-3 text-sm">
               <FunnelRow label="Product views" value={commerce.productViews} />
               <FunnelRow label="Add to cart" value={commerce.addToCart} />

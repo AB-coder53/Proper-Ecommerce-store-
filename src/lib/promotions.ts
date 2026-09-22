@@ -59,7 +59,11 @@ export type CouponQuote = {
   status?: CouponStatus | undefined;
 };
 
-export function couponStatus(coupon: Coupon, usage = coupon.currentUsage ?? 0, now = new Date()): CouponStatus {
+export function couponStatus(
+  coupon: Coupon,
+  usage = coupon.currentUsage ?? 0,
+  now = new Date(),
+): CouponStatus {
   if (!coupon.active) return "inactive";
   if (coupon.usageLimit != null && coupon.usageLimit > 0 && usage >= coupon.usageLimit) {
     return "exhausted";

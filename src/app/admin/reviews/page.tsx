@@ -93,7 +93,12 @@ export default function AdminReviewsPage() {
           placeholder="Filter by product, customer, or order"
           className="h-11 min-w-[240px] flex-1 rounded-full border border-border px-4 text-sm"
         />
-        <Button type="button" variant="outline" className="h-11 rounded-full" onClick={() => void load(status, query)}>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 rounded-full"
+          onClick={() => void load(status, query)}
+        >
           Filter
         </Button>
       </div>

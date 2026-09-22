@@ -34,7 +34,10 @@ export async function POST(request: Request, ctx: Ctx) {
   } catch (error) {
     const err = error as Error & { status?: number };
     if (error instanceof ZodError) {
-      return NextResponse.json({ error: error.issues[0]?.message ?? "Invalid review." }, { status: 400 });
+      return NextResponse.json(
+        { error: error.issues[0]?.message ?? "Invalid review." },
+        { status: 400 },
+      );
     }
     return NextResponse.json(
       { error: err.message || "Could not submit review." },

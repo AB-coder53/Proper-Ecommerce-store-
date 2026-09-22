@@ -19,7 +19,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { addToCartLabel, useAddToCart } from "@/hooks/use-add-to-cart";
 import { useProductInventory } from "@/hooks/use-product-inventory";
 import type { Product } from "@/lib/catalog-types";
-import { availableStock, productHasPurchasableStock, quantityCap, variantHasStock } from "@/lib/inventory";
+import {
+  availableStock,
+  productHasPurchasableStock,
+  quantityCap,
+  variantHasStock,
+} from "@/lib/inventory";
 import { colorToImageIndex, indexToColor } from "@/lib/product-colors";
 import { isValidProductVariant } from "@/lib/product-variants";
 import type { ReviewSummary } from "@/lib/reviews";
@@ -181,7 +186,10 @@ export function ProductDetail({
             </h1>
             <ProductBadgeList product={liveProduct} className="mt-3" />
             {reviewSummary && reviewSummary.count > 0 ? (
-              <a href="#reviews" className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <a
+                href="#reviews"
+                className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+              >
                 <StarRating value={Math.round(reviewSummary.average)} size="sm" />
                 <span>
                   {reviewSummary.average.toFixed(1)} · {reviewSummary.count} review
@@ -208,7 +216,9 @@ export function ProductDetail({
         <div className="mt-4">
           <CatalogPrice product={liveProduct} hasOffer={hasOffer} align="left" size="detail" />
           {productSoldOut ? (
-            <p className="mt-2 text-sm text-muted-foreground">This product is currently sold out.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This product is currently sold out.
+            </p>
           ) : null}
         </div>
 

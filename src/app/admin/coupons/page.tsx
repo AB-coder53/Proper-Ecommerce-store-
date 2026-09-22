@@ -90,14 +90,29 @@ export default function AdminCouponsPage() {
         Backend-validated discounts. Expired and exhausted codes are rejected automatically.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-8 grid gap-4 rounded-3xl border border-border bg-white p-6 sm:grid-cols-2">
-        <Field label="Code" value={form.code} onChange={(value) => setForm((prev) => ({ ...prev, code: value }))} required />
-        <Field label="Name" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} required />
+      <form
+        onSubmit={onSubmit}
+        className="mt-8 grid gap-4 rounded-3xl border border-border bg-white p-6 sm:grid-cols-2"
+      >
+        <Field
+          label="Code"
+          value={form.code}
+          onChange={(value) => setForm((prev) => ({ ...prev, code: value }))}
+          required
+        />
+        <Field
+          label="Name"
+          value={form.name}
+          onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+          required
+        />
         <label className="space-y-2 text-sm">
           <span className="font-medium">Type</span>
           <select
             value={form.type}
-            onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as Coupon["type"] }))}
+            onChange={(event) =>
+              setForm((prev) => ({ ...prev, type: event.target.value as Coupon["type"] }))
+            }
             className="h-11 w-full rounded-xl border border-border px-3"
           >
             <option value="percent">Percentage off</option>
@@ -187,7 +202,12 @@ export default function AdminCouponsPage() {
             {editing ? "Update coupon" : "Create coupon"}
           </Button>
           {editing ? (
-            <Button type="button" variant="outline" className="ml-2 rounded-full" onClick={() => setForm(emptyCoupon())}>
+            <Button
+              type="button"
+              variant="outline"
+              className="ml-2 rounded-full"
+              onClick={() => setForm(emptyCoupon())}
+            >
               Cancel
             </Button>
           ) : null}

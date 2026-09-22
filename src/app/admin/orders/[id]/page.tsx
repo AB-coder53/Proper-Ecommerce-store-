@@ -277,7 +277,10 @@ export default function AdminOrderDetailPage() {
         <ul className="mt-4 space-y-2 text-sm">
           {notifications.length ? (
             notifications.map((note) => (
-              <li key={note.id} className="flex flex-wrap justify-between gap-2 border-b border-border/70 py-2 last:border-0">
+              <li
+                key={note.id}
+                className="flex flex-wrap justify-between gap-2 border-b border-border/70 py-2 last:border-0"
+              >
                 <span>
                   {note.status === "sent" ? "✓" : note.status === "failed" ? "✕" : "•"}{" "}
                   {String(note.eventType).replaceAll("_", " ")} — {note.channel}

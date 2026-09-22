@@ -106,7 +106,9 @@ function fail(message: string, status: number): never {
 
 function enforceRateLimit(customerId: string) {
   const now = Date.now();
-  const stamps = (recentSubmissions.get(customerId) ?? []).filter((time) => now - time < RATE_WINDOW_MS);
+  const stamps = (recentSubmissions.get(customerId) ?? []).filter(
+    (time) => now - time < RATE_WINDOW_MS,
+  );
   if (stamps.length >= RATE_LIMIT) {
     fail("Please wait a few minutes before submitting another review.", 429);
   }
@@ -166,7 +168,9 @@ function toAdmin(review: StoredReview): AdminReview {
 
 function eligibleOrderItem(orders: Order[], productId: string, existing: StoredReview[]) {
   const used = new Set(
-    existing.filter((row) => row.productId === productId && !row.deletedAt).map((row) => row.orderId),
+    existing
+      .filter((row) => row.productId === productId && !row.deletedAt)
+      .map((row) => row.orderId),
   );
   for (const order of orders) {
     if (!REVIEWABLE_STATUSES.has(order.orderStatus)) continue;
@@ -242,7 +246,9 @@ export async function getReviewEligibility(
   const mine = existing.filter((row) => row.customerId === customer.id);
   const match = eligibleOrderItem(orders, productId, mine);
   if (!match) {
-    const purchased = orders.some((order) => order.items.some((item) => item.productId === productId));
+    const purchased = orders.some((order) =>
+      order.items.some((item) => item.productId === productId),
+    );
     return {
       authenticated: true,
       canReview: false,
@@ -273,7 +279,7 @@ export async function submitReview(productId: string, customer: CustomerPublic, 
   const [orders, existing] = await Promise.all([listOrdersForCustomer(customer.id), listStored()]);
   const mine = existing.filter((row) => row.customerId === customer.id);
   const requested = parsed.orderId
-    ? orders.find((order) => order.id === parsed.orderId) ?? null
+    ? (orders.find((order) => order.id === parsed.orderId) ?? null)
     : null;
   if (parsed.orderId && (!requested || requested.customerId !== customer.id)) {
     fail("That order is not available for this review.", 403);
@@ -287,7 +293,11 @@ export async function submitReview(productId: string, customer: CustomerPublic, 
       : null
     : eligibleOrderItem(orders, productId, mine);
   if (!match?.item) fail("You can only review products from a delivered order.", 403);
-  if (mine.some((row) => row.productId === productId && row.orderId === match.order.id && !row.deletedAt)) {
+  if (
+    mine.some(
+      (row) => row.productId === productId && row.orderId === match.order.id && !row.deletedAt,
+    )
+  ) {
     fail("You have already reviewed this product for that order.", 409);
   }
 

@@ -61,7 +61,9 @@ function canFallback(error: unknown) {
   const err = error as { message?: string };
   return (
     isMissingTableError(error) ||
-    /product_badges|product_badge_assignments|coupons|coupon_redemptions/i.test(err.message ?? "") ||
+    /product_badges|product_badge_assignments|coupons|coupon_redemptions/i.test(
+      err.message ?? "",
+    ) ||
     /SUPABASE_SERVICE_ROLE_KEY|Missing Supabase/i.test(err.message ?? "")
   );
 }
@@ -110,16 +112,20 @@ function mapCoupon(row: Record<string, unknown>, usage = 0): Coupon {
     startsAt: String(row["starts_at"] ?? row["startsAt"] ?? ""),
     endsAt: String(row["ends_at"] ?? row["endsAt"] ?? ""),
     minOrderValue: Number(row["min_order_value"] ?? row["minOrderValue"] ?? 0),
-    maxDiscount: row["max_discount"] == null && row["maxDiscount"] == null
-      ? null
-      : Number(row["max_discount"] ?? row["maxDiscount"]),
-    usageLimit: row["usage_limit"] == null && row["usageLimit"] == null
-      ? null
-      : Number(row["usage_limit"] ?? row["usageLimit"]),
-    usagePerCustomer: row["usage_per_customer"] == null && row["usagePerCustomer"] == null
-      ? null
-      : Number(row["usage_per_customer"] ?? row["usagePerCustomer"]),
-    productIds: (row["product_ids"] as string[] | undefined) ?? (row["productIds"] as string[]) ?? [],
+    maxDiscount:
+      row["max_discount"] == null && row["maxDiscount"] == null
+        ? null
+        : Number(row["max_discount"] ?? row["maxDiscount"]),
+    usageLimit:
+      row["usage_limit"] == null && row["usageLimit"] == null
+        ? null
+        : Number(row["usage_limit"] ?? row["usageLimit"]),
+    usagePerCustomer:
+      row["usage_per_customer"] == null && row["usagePerCustomer"] == null
+        ? null
+        : Number(row["usage_per_customer"] ?? row["usagePerCustomer"]),
+    productIds:
+      (row["product_ids"] as string[] | undefined) ?? (row["productIds"] as string[]) ?? [],
     currentUsage: usage,
     createdAt: String(row["created_at"] ?? row["createdAt"] ?? ""),
     updatedAt: String(row["updated_at"] ?? row["updatedAt"] ?? ""),
@@ -212,9 +218,9 @@ export async function setProductBadges(productId: string, badgeIds: string[]) {
     async () => {
       await db().from("product_badge_assignments").delete().eq("product_id", productId);
       if (!unique.length) return;
-      const { error } = await db().from("product_badge_assignments").insert(
-        unique.map((badgeId) => ({ product_id: productId, badge_id: badgeId })),
-      );
+      const { error } = await db()
+        .from("product_badge_assignments")
+        .insert(unique.map((badgeId) => ({ product_id: productId, badge_id: badgeId })));
       if (error) throw error;
     },
     async () => {
@@ -229,7 +235,8 @@ export async function setProductBadges(productId: string, badgeIds: string[]) {
 }
 
 export async function attachProductBadges<T extends { id: string }>(products: T[]) {
-  if (!products.length) return products.map((product) => ({ ...product, badges: [] as ProductBadge[] }));
+  if (!products.length)
+    return products.map((product) => ({ ...product, badges: [] as ProductBadge[] }));
   const [badges, assignments] = await Promise.all([listBadges(), listBadgeAssignments()]);
   const active = new Map(badges.filter((row) => row.active).map((row) => [row.id, row]));
   return products.map((product) => ({
@@ -311,12 +318,7 @@ export async function saveCoupon(input: Coupon, mode: "create" | "update") {
       const query =
         mode === "create"
           ? db().from("coupons").insert(payload).select("*").single()
-          : db()
-              .from("coupons")
-              .update(payload)
-              .eq("id", parsed.id)
-              .select("*")
-              .single();
+          : db().from("coupons").update(payload).eq("id", parsed.id).select("*").single();
       const { data, error } = await query;
       if (error || !data) throw error ?? new Error("Could not save coupon");
       return mapCoupon(data as Record<string, unknown>);
@@ -443,13 +445,15 @@ export async function recordCouponRedemption(input: {
 }) {
   await withDbOrFile(
     async () => {
-      const { error } = await db().from("coupon_redemptions").insert({
-        coupon_id: input.couponId,
-        order_id: input.orderId,
-        customer_id: input.customerId ?? null,
-        code: input.code,
-        discount: input.discount,
-      });
+      const { error } = await db()
+        .from("coupon_redemptions")
+        .insert({
+          coupon_id: input.couponId,
+          order_id: input.orderId,
+          customer_id: input.customerId ?? null,
+          code: input.code,
+          discount: input.discount,
+        });
       if (error && /duplicate|unique/i.test(error.message)) return;
       if (error) throw error;
     },
