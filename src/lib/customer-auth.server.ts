@@ -5,13 +5,15 @@ import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-import { CUSTOMER_COOKIE_NAME } from "@/lib/commerce-constants";
+import { CUSTOMER_COOKIE_NAME, IMPORTED_CUSTOMER_PASSWORD } from "@/lib/commerce-constants";
 import type { CustomerPublic, LoginInput, SignupInput } from "@/lib/commerce-types";
 import { normalizeMobile } from "@/lib/reservation-utils";
 import {
   createCustomerRecord,
   findCustomerByEmail,
   findCustomerById,
+  setCustomerPasswordHash,
+  updateCustomerProfile,
   type CustomerRecord,
 } from "@/lib/commerce.server";
 
@@ -121,8 +123,19 @@ export async function signupCustomer(input: SignupInput) {
     throw Object.assign(new Error("Enter a valid 10-digit Indian mobile number."), { status: 400 });
 
   const existing = await findCustomerByEmail(email);
-  if (existing)
-    throw Object.assign(new Error("An account with this email already exists."), { status: 409 });
+  if (existing) {
+    if (existing.passwordHash !== IMPORTED_CUSTOMER_PASSWORD) {
+      throw Object.assign(new Error("An account with this email already exists."), { status: 409 });
+    }
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const updated = await setCustomerPasswordHash(existing.id, passwordHash);
+    const customer = await updateCustomerProfile(updated.id, {
+      fullName: input.fullName.trim(),
+      phone,
+      alternatePhone: updated.alternatePhone,
+    });
+    return toPublicCustomer(customer);
+  }
 
   const passwordHash = await bcrypt.hash(input.password, 12);
   const now = new Date().toISOString();
@@ -147,7 +160,18 @@ export async function loginCustomer(input: LoginInput) {
   if (!customer || customer.status !== "active") {
     throw Object.assign(new Error("Invalid email or password."), { status: 401 });
   }
-  const ok = await bcrypt.compare(input.password, customer.passwordHash);
+  if (customer.passwordHash === IMPORTED_CUSTOMER_PASSWORD) {
+    throw Object.assign(
+      new Error("Please create an account with this email to set a password for your reservation."),
+      { status: 401 },
+    );
+  }
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(input.password, customer.passwordHash);
+  } catch {
+    ok = false;
+  }
   if (!ok) throw Object.assign(new Error("Invalid email or password."), { status: 401 });
   return toPublicCustomer(customer);
 }

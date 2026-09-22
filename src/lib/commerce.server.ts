@@ -29,6 +29,7 @@ import { productImageForColor } from "@/lib/cart-display";
 import { deductOrderInventory, getVariant, restoreOrderInventory } from "@/lib/inventory.server";
 import { RELEASE_ORDER_STATUSES } from "@/lib/inventory";
 import { normalizeMobile } from "@/lib/reservation-utils";
+import { syncPrelaunchLeadsToOrders } from "@/lib/prelaunch-orders.server";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -422,6 +423,32 @@ export async function updateCustomerProfile(
       };
       await writeFileStore(store);
       return store.customers[idx]!;
+    },
+  );
+}
+
+export async function setCustomerPasswordHash(customerId: string, passwordHash: string) {
+  const now = new Date().toISOString();
+  return withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      const { data, error } = await sb
+        .from("customers")
+        .update({ password_hash: passwordHash, updated_at: now })
+        .eq("id", customerId)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return mapCustomerRow(data as Record<string, unknown>);
+    },
+    async () => {
+      const store = await readFileStore();
+      const found = store.customers.find((row) => row.id === customerId);
+      if (!found) throw Object.assign(new Error("Customer not found."), { status: 404 });
+      found.passwordHash = passwordHash;
+      found.updatedAt = now;
+      await writeFileStore(store);
+      return found;
     },
   );
 }
@@ -1412,6 +1439,11 @@ export async function findOrderByNumber(orderNumber: string) {
 }
 
 export async function listAllOrders() {
+  try {
+    await syncPrelaunchLeadsToOrders();
+  } catch (error) {
+    console.error("[prelaunch-import]", error);
+  }
   return queryOrders();
 }
 

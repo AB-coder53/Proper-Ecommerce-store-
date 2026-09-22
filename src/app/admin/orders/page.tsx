@@ -19,8 +19,8 @@ export default async function AdminOrdersPage() {
           <h1 className="font-display text-3xl font-bold">Orders</h1>
           <p className="mt-1 text-sm text-muted-foreground">{orders.length} total orders</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Use Processing, Shipped, or Delivered on any row. Customers see the new status within a
-            few seconds.
+            Prelaunch reservations are included here with their original AB- IDs. Use Processing,
+            Shipped, or Delivered on any row. Customers see the new status within a few seconds.
           </p>
         </div>
         <ExportCsvButton type="orders" label="Export CSV" />

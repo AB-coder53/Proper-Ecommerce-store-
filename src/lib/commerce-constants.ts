@@ -2,6 +2,7 @@ export const CUSTOMER_COOKIE_NAME = "ab_customer_session";
 export const GUEST_CART_KEY = "ab_guest_cart";
 export const BUY_NOW_KEY = "ab_buy_now";
 export const AUTH_INTENT_KEY = "ab_auth_intent";
+export const IMPORTED_CUSTOMER_PASSWORD = "!imported";
 
 export const ORDER_STATUSES = [
   "placed",
