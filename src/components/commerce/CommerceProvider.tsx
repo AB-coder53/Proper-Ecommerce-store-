@@ -6,15 +6,35 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useCatalog } from "@/components/site/CatalogProvider";
+import {
+  AUTH_INTENT_KEY,
+  BUY_NOW_KEY,
+  CART_MAX_QUANTITY,
+  GUEST_CART_KEY,
+} from "@/lib/commerce-constants";
+import { guestLineKey } from "@/lib/cart-display";
+import { availableStock, quantityCap, stockShortageMessage } from "@/lib/inventory";
+import { safeInternalPath } from "@/lib/safe-redirect";
+import type {
+  CartItemInput,
+  CartLine,
+  CustomerPublic,
+  Order,
+  WishlistItem,
+} from "@/lib/commerce-types";
 
-import { AuthModal } from "@/components/commerce/AuthModal";
-import { AUTH_INTENT_KEY, BUY_NOW_KEY, GUEST_CART_KEY } from "@/lib/commerce-constants";
-import type { CartItemInput, CartLine, CustomerPublic, WishlistItem } from "@/lib/commerce-types";
+const AuthModal = dynamic(
+  () => import("@/components/commerce/AuthModal").then((mod) => mod.AuthModal),
+  { ssr: false },
+);
 
 type AuthIntent =
   | { type: "buy_now"; item: CartItemInput; redirect?: string }
@@ -36,10 +56,25 @@ type CommerceContextValue = {
   closeAuth: () => void;
   refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
-  addToCart: (item: CartItemInput, opts?: { silent?: boolean }) => Promise<void>;
+  addToCart: (
+    item: CartItemInput,
+    opts?: { silent?: boolean; skipDrawer?: boolean },
+  ) => Promise<{ ok: boolean; error?: string }>;
   buyNow: (item: CartItemInput) => Promise<void>;
-  updateCartQuantity: (itemId: string, quantity: number) => Promise<void>;
-  removeFromCart: (itemId: string) => Promise<void>;
+  updateCartQuantity: (
+    itemId: string,
+    quantity: number,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  updateCartVariant: (
+    itemId: string,
+    size: string,
+    color: string,
+  ) => Promise<{ ok: boolean; error?: string }>;
+  removeFromCart: (itemId: string) => Promise<{ ok: boolean; error?: string }>;
+  applySuccessfulOrder: (order: Order, mode: "cart" | "buy_now") => Promise<void>;
+  cartDrawerOpen: boolean;
+  openCart: () => void;
+  closeCart: () => void;
   toggleWishlist: (productId: string) => Promise<void>;
   moveWishlistToCart: (productId: string, size: string, color: string) => Promise<void>;
 };
@@ -60,10 +95,6 @@ function writeGuestCart(items: CartItemInput[]) {
   localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
 }
 
-function guestLineKey(item: CartItemInput) {
-  return `${item.productId}__${item.size}__${item.color}`;
-}
-
 export function useCommerce() {
   const ctx = useContext(CommerceContext);
   if (!ctx) throw new Error("useCommerce must be used within CommerceProvider");
@@ -72,6 +103,7 @@ export function useCommerce() {
 
 export function CommerceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { products, refresh: refreshCatalog } = useCatalog();
   const [customer, setCustomer] = useState<CustomerPublic | null>(null);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -79,6 +111,16 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [authOpen, setAuthOpen] = useState(false);
   const [authIntent, setAuthIntent] = useState<AuthIntent>(null);
+  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
+  const addLocks = useRef(new Set<string>());
+  const wishlistLocks = useRef(new Set<string>());
+  const qtyLocks = useRef(new Map<string, Promise<unknown>>());
+  const pendingQty = useRef(new Map<string, number>());
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+
+  const openCart = useCallback(() => setCartDrawerOpen(true), []);
+  const closeCart = useCallback(() => setCartDrawerOpen(false), []);
 
   const refreshSession = useCallback(async () => {
     const res = await fetch("/api/customer/auth");
@@ -121,6 +163,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   const closeAuth = useCallback(() => {
     setAuthOpen(false);
     setAuthIntent(null);
+    if (typeof window !== "undefined") sessionStorage.removeItem(AUTH_INTENT_KEY);
   }, []);
 
   const logout = useCallback(async () => {
@@ -134,38 +177,69 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   const addToCart = useCallback(
-    async (item: CartItemInput, opts?: { silent?: boolean }) => {
-      if (!customer) {
-        const next = [...readGuestCart()];
-        const idx = next.findIndex((row) => guestLineKey(row) === guestLineKey(item));
-        if (idx >= 0) {
-          next[idx] = {
-            ...next[idx]!,
-            quantity: Math.min(20, next[idx]!.quantity + item.quantity),
-          };
-        } else {
-          next.push(item);
+    async (item: CartItemInput, opts?: { silent?: boolean; skipDrawer?: boolean }) => {
+      const lockKey = guestLineKey(item);
+      if (addLocks.current.has(lockKey)) {
+        return { ok: false, error: "Already adding this item." };
+      }
+      addLocks.current.add(lockKey);
+      try {
+        if (!customer) {
+          const next = [...readGuestCart()];
+          const product = products.find((row) => row.id === item.productId);
+          const stock = availableStock(product, item.color, item.size, CART_MAX_QUANTITY);
+          const existingQty = next.find((row) => guestLineKey(row) === lockKey)?.quantity ?? 0;
+          if (stock <= 0 || existingQty + item.quantity > stock) {
+            const error = stockShortageMessage({
+              name: product?.name ?? item.productId,
+              color: item.color,
+              size: item.size,
+              requested: existingQty + item.quantity,
+              stock,
+            });
+            if (!opts?.silent) toast.error(error);
+            return { ok: false, error };
+          }
+          const idx = next.findIndex((row) => guestLineKey(row) === lockKey);
+          if (idx >= 0) {
+            next[idx] = {
+              ...next[idx]!,
+              quantity: Math.min(quantityCap(stock), next[idx]!.quantity + item.quantity),
+            };
+          } else {
+            next.push({ ...item, quantity: Math.min(quantityCap(stock), item.quantity) });
+          }
+          writeGuestCart(next);
+          setGuestCart(next);
+          if (!opts?.silent) toast.success("Added to cart");
+          if (!opts?.skipDrawer) openCart();
+          return { ok: true };
         }
-        writeGuestCart(next);
-        setGuestCart(next);
-        if (!opts?.silent) toast.success("Added to cart");
-        return;
-      }
 
-      const res = await fetch("/api/customer/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(item),
-      });
-      const data = (await res.json()) as { items?: CartLine[]; error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "Could not add to cart");
-        return;
+        const res = await fetch("/api/customer/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item),
+        });
+        const data = (await res.json()) as { items?: CartLine[]; error?: string };
+        if (!res.ok) {
+          const error = data.error || "Unable to add this item to your cart. Please try again.";
+          if (!opts?.silent) toast.error(error);
+          return { ok: false, error };
+        }
+        setCart(data.items ?? []);
+        if (!opts?.silent) toast.success("Added to cart");
+        if (!opts?.skipDrawer) openCart();
+        return { ok: true };
+      } catch {
+        const error = "Unable to add this item to your cart. Please try again.";
+        if (!opts?.silent) toast.error(error);
+        return { ok: false, error };
+      } finally {
+        addLocks.current.delete(lockKey);
       }
-      setCart(data.items ?? []);
-      if (!opts?.silent) toast.success("Added to cart");
     },
-    [customer],
+    [customer, openCart, products],
   );
 
   const buyNow = useCallback(
@@ -182,51 +256,221 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
 
   const updateCartQuantity = useCallback(
     async (itemId: string, quantity: number) => {
-      if (!customer) {
-        // guest cart ids are synthetic keys
-        const next = readGuestCart()
-          .map((row) => (guestLineKey(row) === itemId ? { ...row, quantity } : row))
-          .filter((row) => row.quantity > 0);
-        writeGuestCart(next);
-        setGuestCart(next);
-        return;
-      }
-      const res = await fetch("/api/customer/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setQuantity", itemId, quantity }),
+      pendingQty.current.set(itemId, quantity);
+      const previous = qtyLocks.current.get(itemId) ?? Promise.resolve();
+      let release: (value?: unknown) => void = () => undefined;
+      const gate = new Promise((resolve) => {
+        release = resolve;
       });
-      const data = (await res.json()) as { items?: CartLine[]; error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "Could not update cart");
-        return;
+      const queued = previous.then(() => gate);
+      qtyLocks.current.set(itemId, queued);
+      await previous.catch(() => undefined);
+      const nextQty = pendingQty.current.get(itemId) ?? quantity;
+      pendingQty.current.delete(itemId);
+      const snapshot = cartRef.current;
+      try {
+        if (!customer) {
+          const items = readGuestCart();
+          const current = items.find((row) => guestLineKey(row) === itemId);
+          if (current && nextQty > 0) {
+            const product = products.find((row) => row.id === current.productId);
+            const stock = availableStock(product, current.color, current.size, CART_MAX_QUANTITY);
+            if (nextQty > stock) {
+              const error = stockShortageMessage({
+                name: product?.name ?? current.productId,
+                color: current.color,
+                size: current.size,
+                requested: nextQty,
+                stock,
+              });
+              toast.error(error);
+              return { ok: false, error };
+            }
+          }
+          const next = items
+            .map((row) => (guestLineKey(row) === itemId ? { ...row, quantity: nextQty } : row))
+            .filter((row) => row.quantity > 0);
+          writeGuestCart(next);
+          setGuestCart(next);
+          return { ok: true };
+        }
+        setCart((current) =>
+          current
+            .map((line) =>
+              line.id === itemId
+                ? { ...line, quantity: nextQty, lineTotal: line.unitPrice * nextQty }
+                : line,
+            )
+            .filter((line) => line.quantity > 0),
+        );
+        const res = await fetch("/api/customer/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "setQuantity", itemId, quantity: nextQty }),
+        });
+        const data = (await res.json()) as { items?: CartLine[]; error?: string };
+        if (!res.ok) {
+          setCart(snapshot);
+          toast.error(data.error || "Could not update quantity. Please try again.");
+          return { ok: false, error: data.error || "Could not update quantity." };
+        }
+        setCart(data.items ?? []);
+        return { ok: true };
+      } catch {
+        if (customer) setCart(snapshot);
+        toast.error("Could not update quantity. Please try again.");
+        return { ok: false, error: "Could not update quantity." };
+      } finally {
+        release();
+        if (qtyLocks.current.get(itemId) === queued) {
+          qtyLocks.current.delete(itemId);
+        }
       }
-      setCart(data.items ?? []);
     },
-    [customer],
+    [customer, products],
+  );
+
+  const updateCartVariant = useCallback(
+    async (itemId: string, size: string, color: string) => {
+      try {
+        if (!customer) {
+          const items = readGuestCart();
+          const current = items.find((row) => guestLineKey(row) === itemId);
+          if (!current) return { ok: false, error: "Cart item not found." };
+          const product = products.find((row) => row.id === current.productId);
+          const nextItem = { ...current, size, color };
+          const nextKey = guestLineKey(nextItem);
+          const without = items.filter((row) => guestLineKey(row) !== itemId);
+          const existing = without.find((row) => guestLineKey(row) === nextKey);
+          const mergedQty = (existing?.quantity ?? 0) + current.quantity;
+          const stock = availableStock(product, color, size, CART_MAX_QUANTITY);
+          if (stock <= 0 || mergedQty > stock) {
+            const error = stockShortageMessage({
+              name: product?.name ?? current.productId,
+              color,
+              size,
+              requested: mergedQty,
+              stock,
+            });
+            toast.error(error);
+            return { ok: false, error };
+          }
+          const next = existing
+            ? without.map((row) =>
+                guestLineKey(row) === nextKey
+                  ? {
+                      ...row,
+                      quantity: Math.min(quantityCap(stock), row.quantity + current.quantity),
+                    }
+                  : row,
+              )
+            : [...without, nextItem];
+          writeGuestCart(next);
+          setGuestCart(next);
+          return { ok: true };
+        }
+        const res = await fetch("/api/customer/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "setVariant", itemId, size, color }),
+        });
+        const data = (await res.json()) as { items?: CartLine[]; error?: string };
+        if (!res.ok) {
+          toast.error(data.error || "Could not update this variant.");
+          return { ok: false, error: data.error || "Could not update this variant." };
+        }
+        setCart(data.items ?? []);
+        return { ok: true };
+      } catch {
+        toast.error("Could not update this variant.");
+        return { ok: false, error: "Could not update this variant." };
+      }
+    },
+    [customer, products],
   );
 
   const removeFromCart = useCallback(
     async (itemId: string) => {
-      if (!customer) {
-        const next = readGuestCart().filter((row) => guestLineKey(row) !== itemId);
-        writeGuestCart(next);
-        setGuestCart(next);
-        return;
+      const snapshot = cartRef.current;
+      try {
+        if (!customer) {
+          const next = readGuestCart().filter((row) => guestLineKey(row) !== itemId);
+          writeGuestCart(next);
+          setGuestCart(next);
+          return { ok: true };
+        }
+        setCart((current) => current.filter((line) => line.id !== itemId));
+        const res = await fetch("/api/customer/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "remove", itemId }),
+        });
+        const data = (await res.json()) as { items?: CartLine[]; error?: string };
+        if (!res.ok) {
+          setCart(snapshot);
+          toast.error(data.error || "Could not remove item");
+          return { ok: false, error: data.error || "Could not remove item" };
+        }
+        setCart(data.items ?? []);
+        return { ok: true };
+      } catch {
+        if (customer) setCart(snapshot);
+        toast.error("Could not remove item");
+        return { ok: false, error: "Could not remove item" };
       }
-      const res = await fetch("/api/customer/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "remove", itemId }),
-      });
-      const data = (await res.json()) as { items?: CartLine[]; error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "Could not remove item");
-        return;
-      }
-      setCart(data.items ?? []);
     },
-    [customer],
+    [customer, products],
+  );
+
+  const applySuccessfulOrder = useCallback(
+    async (order: Order, mode: "cart" | "buy_now") => {
+      void refreshCatalog(true);
+      const ordered = new Set(
+        (order.items ?? []).map((item) =>
+          guestLineKey({ productId: item.productId, size: item.size, color: item.color }),
+        ),
+      );
+
+      if (mode === "cart") {
+        setCart([]);
+        writeGuestCart([]);
+        setGuestCart([]);
+        closeCart();
+        return;
+      }
+
+      const nextGuest = readGuestCart().filter((row) => !ordered.has(guestLineKey(row)));
+      writeGuestCart(nextGuest);
+      setGuestCart(nextGuest);
+      if (customer) {
+        const snapshot = cartRef.current;
+        setCart(
+          snapshot.filter(
+            (line) =>
+              !ordered.has(
+                guestLineKey({ productId: line.productId, size: line.size, color: line.color }),
+              ),
+          ),
+        );
+        void Promise.all(
+          snapshot
+            .filter((line) =>
+              ordered.has(
+                guestLineKey({ productId: line.productId, size: line.size, color: line.color }),
+              ),
+            )
+            .map((line) =>
+              fetch("/api/customer/cart", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "remove", itemId: line.id }),
+              }).catch(() => undefined),
+            ),
+        );
+      }
+      closeCart();
+    },
+    [closeCart, customer, refreshCatalog],
   );
 
   const toggleWishlist = useCallback(
@@ -235,23 +479,31 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
         openAuth({ type: "wishlist", productId });
         return;
       }
+      if (wishlistLocks.current.has(productId)) return;
+      wishlistLocks.current.add(productId);
       const exists = wishlist.some((w) => w.productId === productId);
-      const res = exists
-        ? await fetch(`/api/customer/wishlist?productId=${encodeURIComponent(productId)}`, {
-            method: "DELETE",
-          })
-        : await fetch("/api/customer/wishlist", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId }),
-          });
-      const data = (await res.json()) as { items?: WishlistItem[]; error?: string };
-      if (!res.ok) {
-        toast.error(data.error || "Could not update wishlist");
-        return;
+      try {
+        const res = exists
+          ? await fetch(`/api/customer/wishlist?productId=${encodeURIComponent(productId)}`, {
+              method: "DELETE",
+            })
+          : await fetch("/api/customer/wishlist", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ productId }),
+            });
+        const data = (await res.json()) as { items?: WishlistItem[]; error?: string };
+        if (!res.ok) {
+          toast.error(data.error || "Could not update wishlist");
+          return;
+        }
+        setWishlist(data.items ?? []);
+        toast.success(exists ? "Removed from wishlist" : "Added to wishlist");
+      } catch {
+        toast.error("Could not update wishlist");
+      } finally {
+        wishlistLocks.current.delete(productId);
       }
-      setWishlist(data.items ?? []);
-      toast.success(exists ? "Removed from wishlist" : "Added to wishlist");
     },
     [customer, openAuth, wishlist],
   );
@@ -294,12 +546,15 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
         });
         await refreshSession();
         toast.success("Added to wishlist");
+        closeAuth();
+        router.push("/account/wishlist");
+        return;
       }
 
       if (intent?.type === "buy_now") {
         sessionStorage.setItem(BUY_NOW_KEY, JSON.stringify(intent.item));
         closeAuth();
-        router.push(intent.redirect || "/checkout?mode=buy_now");
+        router.push(safeInternalPath(intent.redirect, "/checkout?mode=buy_now"));
         return;
       }
 
@@ -309,13 +564,14 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (intent?.type === "generic" && intent.redirect) {
+      if (intent?.type === "generic") {
         closeAuth();
-        router.push(intent.redirect);
+        router.push(safeInternalPath(intent.redirect, "/"));
         return;
       }
 
       closeAuth();
+      router.push("/");
     },
     [authIntent, closeAuth, refreshSession, router],
   );
@@ -343,9 +599,14 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       addToCart,
       buyNow,
       updateCartQuantity,
+      updateCartVariant,
       removeFromCart,
+      applySuccessfulOrder,
       toggleWishlist,
       moveWishlistToCart,
+      cartDrawerOpen,
+      openCart,
+      closeCart,
     }),
     [
       customer,
@@ -363,9 +624,14 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       addToCart,
       buyNow,
       updateCartQuantity,
+      updateCartVariant,
       removeFromCart,
+      applySuccessfulOrder,
       toggleWishlist,
       moveWishlistToCart,
+      cartDrawerOpen,
+      openCart,
+      closeCart,
     ],
   );
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ORDER_STATUSES } from "@/lib/commerce-constants";
+import { CART_MAX_QUANTITY, ORDER_STATUSES } from "@/lib/commerce-constants";
 
 export const signupSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
@@ -38,7 +38,7 @@ export const cartItemInputSchema = z.object({
   productId: z.string().trim().min(1).max(80),
   size: z.string().trim().min(1).max(10),
   color: z.string().trim().min(1).max(40),
-  quantity: z.number().int().min(1).max(20).default(1),
+  quantity: z.number().int().min(1).max(CART_MAX_QUANTITY).default(1),
 });
 
 export const checkoutSchema = z.object({
@@ -48,11 +48,19 @@ export const checkoutSchema = z.object({
   mode: z.enum(["cart", "buy_now"]).default("cart"),
   buyNow: cartItemInputSchema.optional(),
   promoCode: z.string().trim().max(40).optional().or(z.literal("")),
+  checkoutId: z.string().uuid().optional(),
 });
 
-export const trackOrderSchema = z.object({
+export const trackOrderRequestSchema = z.object({
   orderNumber: z.string().trim().min(5).max(40),
-  email: z.string().trim().email().max(200),
+});
+
+export const trackOrderVerifySchema = z.object({
+  orderNumber: z.string().trim().min(5).max(40),
+  phoneLast4: z
+    .string()
+    .trim()
+    .regex(/^\d{4}$/, "Enter the last 4 digits of the phone number used at checkout."),
 });
 
 export const orderStatusSchema = z.enum([...ORDER_STATUSES, "cancelled", "failed", "returned"] as [
@@ -122,6 +130,8 @@ export type OrderItem = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  variantId?: string | null;
+  sku?: string | null;
 };
 
 export type Order = {
@@ -145,7 +155,18 @@ export type Order = {
   orderStatus: string;
   createdAt: string;
   updatedAt: string;
+  inventoryState?: "none" | "deducted" | "restored";
+  promoCode?: string | null;
+  couponDiscount?: number;
+  bundleDiscount?: number;
+  invoiceNumber?: string | null;
+  paymentMethod?: string | null;
+  trackingNumber?: string | null;
+  carrier?: string | null;
+  trackingUrl?: string | null;
+  checkoutId?: string | null;
   items: OrderItem[];
+  expectedDelivery?: string | null;
 };
 
 export type CustomerAdminRow = CustomerPublic & {

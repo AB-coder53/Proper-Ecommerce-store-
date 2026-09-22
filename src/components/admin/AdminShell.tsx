@@ -11,8 +11,13 @@ const LINKS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/products", label: "Products" },
+  { href: "/admin/badges", label: "Badges" },
+  { href: "/admin/coupons", label: "Coupons" },
+  { href: "/admin/bundles", label: "Bundles" },
+  { href: "/admin/shipping", label: "Shipping" },
   { href: "/admin/collections", label: "Collections" },
   { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/reviews", label: "Reviews" },
   { href: "/admin/customers", label: "Customers" },
 ];
 

@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 
 import { requireAdminSession } from "@/lib/admin-auth.server";
 import { deleteProduct, getProductById, saveProduct } from "@/lib/catalog.server";
-import { productSchema } from "@/lib/catalog-types";
+import { asProduct, productSchema } from "@/lib/catalog-types";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,7 +28,8 @@ export async function PUT(request: Request, ctx: Ctx) {
     if (parsed.id !== id) {
       return NextResponse.json({ error: "Product id cannot be changed." }, { status: 400 });
     }
-    const saved = await saveProduct(parsed, "update");
+    const product = asProduct(parsed);
+    const saved = await saveProduct(product, "update");
     return NextResponse.json({ product: saved });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {

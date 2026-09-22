@@ -24,7 +24,7 @@ export function IstefadaOfferBanner() {
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex size-11 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Dismiss offer banner"
         >
           <X className="size-4" />

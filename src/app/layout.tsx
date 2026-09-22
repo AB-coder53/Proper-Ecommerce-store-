@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Manrope, Playfair_Display } from "next/font/google";
 import type { ReactNode } from "react";
 
 import { AppProviders } from "@/components/site/AppProviders";
@@ -9,6 +10,19 @@ import { JsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 import "./globals.css";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-playfair",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -51,14 +65,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const catalog = await getCatalog();
 
   return (
-    <html lang="en">
+    <html lang="en" className={`${manrope.variable} ${playfair.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
-          rel="stylesheet"
-        />
         <link rel="alternate" type="text/plain" href={canonicalUrl("/llms.txt")} title="LLMs.txt" />
         <link rel="alternate" type="text/plain" href={canonicalUrl("/ai.txt")} title="AI.txt" />
       </head>

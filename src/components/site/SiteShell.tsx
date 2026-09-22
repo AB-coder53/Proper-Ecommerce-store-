@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { IstefadaOfferBanner } from "@/components/site/IstefadaOfferBanner";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
+import { CartDrawer } from "@/components/commerce/CartDrawer";
 
 type ReservationContextValue = {
   unlocked: boolean;
@@ -44,9 +45,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
   return (
     <ReservationContext.Provider value={value}>
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="min-h-screen min-w-0 bg-background text-foreground">
         <IstefadaOfferBanner />
         <SiteHeader />
+        <CartDrawer />
         <main>{children}</main>
         <SiteFooter />
       </div>

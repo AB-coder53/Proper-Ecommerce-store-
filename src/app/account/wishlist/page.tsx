@@ -5,12 +5,15 @@ import { useEffect, useState } from "react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
+import { VariantSelectDialog } from "@/components/site/VariantSelectDialog";
 import { Button } from "@/components/ui/button";
+import { resolveDirectCartVariant } from "@/lib/product-variants";
 
 export default function WishlistPage() {
   const { customer, loading, openAuth, wishlist, toggleWishlist, addToCart } = useCommerce();
   const { products } = useCatalog();
   const [busy, setBusy] = useState<string | null>(null);
+  const [pickerId, setPickerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !customer) openAuth({ type: "generic", redirect: "/account/wishlist" });
@@ -39,8 +42,6 @@ export default function WishlistPage() {
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {wishlist.map((item) => {
             const product = products.find((p) => p.id === item.productId);
-            const size = product?.sizes[0] ?? "M";
-            const color = product?.colors[0] ?? "Default";
             return (
               <article key={item.id} className="rounded-3xl border border-border p-4">
                 <Link href={`/collection/${item.productId}`}>
@@ -56,18 +57,26 @@ export default function WishlistPage() {
                   <Button
                     disabled={busy === item.productId}
                     onClick={() => {
+                      if (!product) return;
+                      const direct = resolveDirectCartVariant(product);
+                      if (!direct) {
+                        setPickerId(product.id);
+                        return;
+                      }
                       setBusy(item.productId);
-                      void addToCart({
-                        productId: item.productId,
-                        size,
-                        color,
-                        quantity: 1,
-                      }).finally(() => setBusy(null));
+                      void addToCart(direct).finally(() => setBusy(null));
                     }}
                     className="h-10 rounded-full bg-teal text-xs tracking-[0.12em] text-teal-foreground uppercase"
                   >
                     Move to Cart
                   </Button>
+                  {product && pickerId === product.id ? (
+                    <VariantSelectDialog
+                      product={product}
+                      open
+                      onOpenChange={(open) => setPickerId(open ? product.id : null)}
+                    />
+                  ) : null}
                   <Button
                     variant="outline"
                     onClick={() => void toggleWishlist(item.productId)}

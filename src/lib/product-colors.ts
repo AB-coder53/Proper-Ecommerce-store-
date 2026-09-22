@@ -1,5 +1,3 @@
-"use client";
-
 const COLOR_SWATCH: Record<string, string> = {
   black: "bg-neutral-900",
   white: "bg-white border border-border",

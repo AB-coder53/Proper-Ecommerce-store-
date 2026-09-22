@@ -19,25 +19,23 @@ export default async function AdminAnalyticsPage() {
   if (!session) redirect("/admin/login");
 
   const ready = await isAnalyticsTableReady();
-  const summary = ready ? await getAnalyticsSummary(7) : null;
+  const summary = await getAnalyticsSummary(7);
 
   return (
     <AdminShell username={session.username}>
       <h1 className="font-display text-3xl font-bold">Analytics</h1>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Track how many people visit your site, which pages they view, what they click, and where
-        they came from — including Google, Instagram, UTM links, and campaign pages like Istefada.
+        Sales, inventory, coupons, and storefront traffic for the selected period.
       </p>
 
-      {!ready || !summary ? (
+      {!ready ? (
         <div className="mt-8">
           <AnalyticsSetupNotice />
         </div>
-      ) : (
-        <div className="mt-8">
-          <AnalyticsDashboard initial={summary} />
-        </div>
-      )}
+      ) : null}
+      <div className="mt-8">
+        <AnalyticsDashboard initial={summary} />
+      </div>
     </AdminShell>
   );
 }

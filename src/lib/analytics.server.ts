@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { AnalyticsEventRow, AnalyticsSummary } from "@/lib/analytics.types";
+import { getCommerceAnalytics } from "@/lib/commerce-analytics.server";
 
 export const analyticsEventSchema = z.object({
   eventType: z.enum(["page_view", "click"]),
@@ -159,7 +160,38 @@ function mapEventRow(row: {
   };
 }
 
-export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSummary> {
+function deviceFromUa(ua: string | null) {
+  const value = (ua ?? "").toLowerCase();
+  if (/ipad|tablet/.test(value)) return "Tablet";
+  if (/mobi|iphone|android/.test(value)) return "Mobile";
+  if (!ua) return "Unknown";
+  return "Desktop";
+}
+
+export async function getAnalyticsSummary(
+  periodDays = 7,
+  range?: { from: Date; to: Date },
+): Promise<AnalyticsSummary> {
+  const to = range?.to ?? new Date();
+  const from =
+    range?.from ??
+    (() => {
+      const start = new Date(to);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - Math.max(0, periodDays - 1));
+      return start;
+    })();
+  const span = Math.max(to.getTime() - from.getTime(), 24 * 60 * 60 * 1000);
+  const previousFrom = new Date(from.getTime() - span);
+  const commerce = await getCommerceAnalytics(from, to, previousFrom);
+  const commerceDaily = commerce.daily.map((row) => ({
+    date: row.date,
+    pageViews: 0,
+    uniqueSessions: 0,
+    revenue: row.revenue,
+    orders: row.orders,
+  }));
+
   const ready = await isAnalyticsTableReady();
   if (!ready) {
     return {
@@ -171,20 +203,20 @@ export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSumm
       topPages: [],
       topReferrers: [],
       topClicks: [],
-      daily: [],
+      daily: commerceDaily,
       recentEvents: [],
+      devices: [],
+      commerce,
     };
   }
-
-  const since = new Date();
-  since.setDate(since.getDate() - periodDays);
 
   const { data, error } = await supabaseAdmin
     .from("site_analytics_events")
     .select(
-      "id, event_type, path, event_name, target_path, session_id, visitor_id, referrer_host, utm_source, campaign_source, created_at",
+      "id, event_type, path, event_name, target_path, session_id, visitor_id, referrer_host, utm_source, campaign_source, user_agent, created_at",
     )
-    .gte("created_at", since.toISOString())
+    .gte("created_at", from.toISOString())
+    .lte("created_at", to.toISOString())
     .order("created_at", { ascending: false })
     .limit(15000);
 
@@ -201,6 +233,7 @@ export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSumm
   const referrerStats = new Map<string, Set<string>>();
   const clickStats = new Map<string, { name: string; target: string; count: number }>();
   const dailyStats = new Map<string, { pageViews: number; sessions: Set<string> }>();
+  const deviceStats = new Map<string, Set<string>>();
 
   for (const row of rows) {
     sessions.add(row.session_id);
@@ -208,6 +241,11 @@ export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSumm
     const day = row.created_at.slice(0, 10);
     const daily = dailyStats.get(day) ?? { pageViews: 0, sessions: new Set<string>() };
     daily.sessions.add(row.session_id);
+
+    const device = deviceFromUa((row as { user_agent?: string | null }).user_agent ?? null);
+    const deviceSessions = deviceStats.get(device) ?? new Set<string>();
+    deviceSessions.add(row.session_id);
+    deviceStats.set(device, deviceSessions);
 
     if (row.event_type === "page_view") {
       pageViews += 1;
@@ -253,13 +291,37 @@ export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSumm
 
   const topClicks = [...clickStats.values()].sort((a, b) => b.count - a.count).slice(0, 10);
 
-  const daily = [...dailyStats.entries()]
-    .map(([date, stats]) => ({
+  const salesByDay = new Map(commerce.daily.map((row) => [row.date, row]));
+  const dailyDates = new Set([...dailyStats.keys(), ...salesByDay.keys()]);
+  const daily = [...dailyDates]
+    .sort((a, b) => a.localeCompare(b))
+    .map((date) => ({
       date,
-      pageViews: stats.pageViews,
-      uniqueSessions: stats.sessions.size,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+      pageViews: dailyStats.get(date)?.pageViews ?? 0,
+      uniqueSessions: dailyStats.get(date)?.sessions.size ?? 0,
+      revenue: salesByDay.get(date)?.revenue ?? 0,
+      orders: salesByDay.get(date)?.orders ?? 0,
+    }));
+
+  let productViews = 0;
+  let addToCart = 0;
+  let checkoutStarted = 0;
+  for (const row of rows) {
+    if (row.event_type === "page_view" && /^\/collection\/.+/.test(row.path)) productViews += 1;
+    if (row.event_type === "page_view" && row.path.startsWith("/checkout")) checkoutStarted += 1;
+    if (
+      row.event_type === "click" &&
+      /add to cart|added/i.test(row.event_name ?? "")
+    ) {
+      addToCart += 1;
+    }
+  }
+  commerce.productViews = productViews;
+  commerce.addToCart = addToCart;
+  commerce.checkoutStarted = checkoutStarted;
+  commerce.conversionRate = sessions.size
+    ? Math.round((commerce.orders / sessions.size) * 10000) / 100
+    : null;
 
   return {
     ready: true,
@@ -272,5 +334,9 @@ export async function getAnalyticsSummary(periodDays = 7): Promise<AnalyticsSumm
     topClicks,
     daily,
     recentEvents: rows.slice(0, 40).map(mapEventRow),
+    devices: [...deviceStats.entries()]
+      .map(([label, sessionSet]) => ({ label, sessions: sessionSet.size }))
+      .sort((a, b) => b.sessions - a.sessions),
+    commerce,
   };
 }

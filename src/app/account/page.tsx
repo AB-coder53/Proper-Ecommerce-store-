@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 
 const LINKS = [
   { href: "/account/orders", label: "My Orders", icon: Package },
+  { href: "/track-order", label: "Track Order", icon: MapPin },
   { href: "/account/wishlist", label: "Wishlist", icon: Heart },
-  { href: "/account/settings", label: "Account settings", icon: Settings },
-  { href: "/track-order", label: "Track an order", icon: MapPin },
+  { href: "/account/settings", label: "Profile & addresses", icon: Settings },
 ];
 
 export default function AccountPage() {

@@ -7,6 +7,9 @@ import path from "path";
 
 import type { Database } from "@/integrations/supabase/types";
 import type { Catalog, Collection, Product } from "@/lib/catalog-types";
+import { attachInventory, syncProductVariants } from "@/lib/inventory.server";
+import { parsePriceInr } from "@/lib/price";
+import { attachProductBadges, setProductBadges } from "@/lib/promotions.server";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
@@ -29,6 +32,7 @@ export function invalidateCatalogCache() {
 }
 
 function mapProduct(row: ProductRow): Product {
+  const extra = row as ProductRow & { compare_at_price?: string | null };
   return {
     id: row.id,
     name: row.name,
@@ -41,10 +45,14 @@ function mapProduct(row: ProductRow): Product {
     colors: row.colors ?? [],
     sizes: row.sizes ?? [],
     price: row.price,
+    compareAtPrice: extra.compare_at_price ?? "",
     badge: row.badge ?? "",
+    badgeIds: [],
     sizeChart: row.size_chart ?? "",
     featured: row.featured,
     sortOrder: row.sort_order,
+    variants: [],
+    badges: [],
   };
 }
 
@@ -77,7 +85,8 @@ function toProductInsert(product: Product): ProductInsert {
     size_chart: product.sizeChart?.trim() || null,
     featured: product.featured,
     sort_order: product.sortOrder,
-  };
+    compare_at_price: product.compareAtPrice?.trim() || null,
+  } as ProductInsert;
 }
 
 function toCollectionInsert(collection: Collection): CollectionInsert {
@@ -106,10 +115,11 @@ function isMissingTableError(error: unknown): boolean {
 async function readFallbackCatalog(): Promise<Catalog> {
   const raw = await fs.readFile(FALLBACK_PATH, "utf8");
   const data = JSON.parse(raw) as Catalog;
+  const products = [...(data.products ?? [])]
+    .map((product) => ({ ...product, variants: product.variants ?? [] }))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   return {
-    products: [...(data.products ?? [])].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-    ),
+    products: await attachProductBadges(await attachInventory(products)),
     collections: [...(data.collections ?? [])].sort(
       (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
     ),
@@ -132,10 +142,11 @@ async function readSupabaseCatalog(): Promise<Catalog> {
   if (productsRes.error) throw productsRes.error;
   if (collectionsRes.error) throw collectionsRes.error;
 
-  return {
+  const catalog = {
     products: (productsRes.data ?? []).map(mapProduct),
     collections: (collectionsRes.data ?? []).map(mapCollection),
   };
+  return { ...catalog, products: await attachProductBadges(await attachInventory(catalog.products)) };
 }
 
 async function resolveCatalog(): Promise<Catalog> {
@@ -203,6 +214,12 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   if (mode === "create" && existing) throw new Error("A product with this id already exists");
   if (mode === "update" && !existing) throw new Error("Product not found");
 
+  const selling = parsePriceInr(product.price);
+  const compareAt = parsePriceInr(product.compareAtPrice);
+  if (compareAt > 0 && selling > 0 && selling > compareAt) {
+    throw new Error("Selling price cannot be higher than the compare-at price.");
+  }
+
   const supabase = getSupabaseWriteClient();
   const payload = toProductInsert(product);
 
@@ -214,6 +231,13 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   };
 
   let { data, error } = await persist(payload);
+  if (error && /compare_at_price/.test(error.message)) {
+    const { compare_at_price: _ignored, ...withoutCompare } = payload as ProductInsert & {
+      compare_at_price?: string | null;
+    };
+    void _ignored;
+    ({ data, error } = await persist(withoutCompare));
+  }
   if (error && /size_chart/.test(error.message)) {
     const { size_chart: _ignored, ...withoutChart } = payload;
     void _ignored;
@@ -221,9 +245,13 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   }
   if (error || !data) throw new Error(error?.message ?? "Could not save product");
   if (mode === "create") catalogSource = "supabase";
+  const mapped = mapProduct(data);
+  await syncProductVariants({ ...product, id: mapped.id });
+  await setProductBadges(mapped.id, product.badgeIds ?? []);
   invalidateCatalogCache();
   revalidatePath(`/collection/${product.id}`);
-  return mapProduct(data);
+  const withStock = await attachProductBadges(await attachInventory([mapped]));
+  return withStock[0] ?? mapped;
 }
 
 export async function deleteProduct(id: string) {

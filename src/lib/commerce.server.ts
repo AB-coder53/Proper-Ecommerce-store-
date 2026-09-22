@@ -4,8 +4,9 @@ import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 
-import { getProductById } from "@/lib/catalog.server";
-import { SHIPPING_COST_INR } from "@/lib/commerce-constants";
+import type { Product } from "@/lib/catalog-types";
+import { getProductById, getProducts, invalidateCatalogCache } from "@/lib/catalog.server";
+import { CART_MAX_QUANTITY, SHIPPING_COST_INR } from "@/lib/commerce-constants";
 import type {
   AddressInput,
   CartItemInput,
@@ -18,9 +19,15 @@ import type {
   OrderItem,
   WishlistItem,
 } from "@/lib/commerce-types";
-import { resolveIstefadaDiscount } from "@/lib/istefada-offer";
+import { resolveIstefadaDiscount, ISTEFADA_PROMO_CODE } from "@/lib/istefada-offer";
+import { quoteCoupon, recordCouponRedemption } from "@/lib/promotions.server";
+import { bestApplicableBundle } from "@/lib/store-offers";
+import { getBundleOffers } from "@/lib/store-offers.server";
 import { makeOrderNumber } from "@/lib/order-id";
 import { formatInr, parsePriceInr } from "@/lib/price";
+import { productImageForColor } from "@/lib/cart-display";
+import { deductOrderInventory, getVariant, restoreOrderInventory } from "@/lib/inventory.server";
+import { RELEASE_ORDER_STATUSES } from "@/lib/inventory";
 import { normalizeMobile } from "@/lib/reservation-utils";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -152,6 +159,65 @@ function mapAddressRow(row: Record<string, unknown>): CustomerAddress {
   };
 }
 
+const inflightCheckouts = new Map<string, Promise<Order>>();
+
+function isUniqueConstraintError(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  return err.code === "23505" || /duplicate key|checkout_id/i.test(err.message ?? "");
+}
+
+async function findOrderByCheckoutId(customerId: string, checkoutId: string): Promise<Order | null> {
+  const order = await withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      const { data, error } = await sb
+        .from("orders")
+        .select("*")
+        .eq("customer_id", customerId)
+        .eq("checkout_id", checkoutId)
+        .maybeSingle();
+      if (error) {
+        if (/checkout_id/i.test(error.message ?? "")) return null;
+        throw error;
+      }
+      if (!data) return null;
+      return mapOrderRow(data as Record<string, unknown>);
+    },
+    async () => {
+      const store = await readFileStore();
+      return (
+        store.orders.find((row) => row.customerId === customerId && row.checkoutId === checkoutId) ??
+        null
+      );
+    },
+  );
+  if (!order) return null;
+  const [full] = await attachItems([order]);
+  return full ?? { ...order, items: [] };
+}
+
+function buildCartLine(
+  id: string,
+  product: Product,
+  size: string,
+  color: string,
+  quantity: number,
+): CartLine {
+  const unitPrice = parsePriceInr(product.price);
+  return {
+    id,
+    productId: product.id,
+    size,
+    color,
+    quantity,
+    productName: product.name,
+    productImage: productImageForColor(product, color),
+    unitPrice,
+    priceLabel: product.price,
+    lineTotal: unitPrice * quantity,
+  };
+}
+
 function mapOrderRow(row: Record<string, unknown>, items: OrderItem[] = []): Order {
   return {
     id: String(val(row, "id")),
@@ -172,6 +238,17 @@ function mapOrderRow(row: Record<string, unknown>, items: OrderItem[] = []): Ord
     totalAmount: Number(val(row, "total_amount", "totalAmount")),
     paymentStatus: String(val(row, "payment_status", "paymentStatus")),
     orderStatus: String(val(row, "order_status", "orderStatus")),
+    inventoryState:
+      (val(row, "inventory_state", "inventoryState") as Order["inventoryState"]) || "none",
+    promoCode: (val(row, "promo_code", "promoCode") as string | null) ?? null,
+    couponDiscount: Number(val(row, "coupon_discount", "couponDiscount") ?? 0),
+    bundleDiscount: Number(val(row, "bundle_discount", "bundleDiscount") ?? 0),
+    invoiceNumber: (val(row, "invoice_number", "invoiceNumber") as string | null) ?? null,
+    paymentMethod: (val(row, "payment_method", "paymentMethod") as string | null) ?? "prepaid",
+    trackingNumber: (val(row, "tracking_number", "trackingNumber") as string | null) ?? null,
+    carrier: (val(row, "carrier") as string | null) ?? null,
+    trackingUrl: (val(row, "tracking_url", "trackingUrl") as string | null) ?? null,
+    checkoutId: (val(row, "checkout_id", "checkoutId") as string | null) ?? null,
     createdAt: String(val(row, "created_at", "createdAt")),
     updatedAt: String(val(row, "updated_at", "updatedAt")),
     items,
@@ -190,6 +267,8 @@ function mapOrderItemRow(row: Record<string, unknown>): OrderItem & { orderId: s
     quantity: Number(val(row, "quantity")),
     unitPrice: Number(val(row, "unit_price", "unitPrice")),
     lineTotal: Number(val(row, "line_total", "lineTotal")),
+    variantId: (val(row, "variant_id", "variantId") as string | null) ?? null,
+    sku: (val(row, "sku") as string | null) ?? null,
   };
 }
 
@@ -426,7 +505,7 @@ async function enrichCartLines(
       color: row.color,
       quantity: row.quantity,
       productName: product.name,
-      productImage: product.image,
+      productImage: productImageForColor(product, row.color),
       unitPrice,
       priceLabel: product.price,
       lineTotal: unitPrice * row.quantity,
@@ -465,8 +544,14 @@ export async function getCart(customerId: string) {
   return enrichCartLines(rows);
 }
 
+const recentAdds = new Map<string, number>();
+const ADD_DEDUPE_MS = 800;
+
 export async function upsertCartItem(customerId: string, input: CartItemInput) {
-  const product = await getProductById(input.productId);
+  const [product, currentCart] = await Promise.all([
+    getProductById(input.productId),
+    getCart(customerId),
+  ]);
   if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
   if (!product.sizes.includes(input.size)) {
     throw Object.assign(new Error("Invalid size for this product."), { status: 400 });
@@ -474,33 +559,52 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
   if (!product.colors.includes(input.color)) {
     throw Object.assign(new Error("Invalid colour for this product."), { status: 400 });
   }
+  const variant = await getVariant(input.productId, input.color, input.size);
+  if (!variant || variant.stock <= 0) {
+    throw Object.assign(new Error("This product/variant is currently out of stock."), {
+      status: 409,
+    });
+  }
+  const existingLine = currentCart.find(
+    (line) =>
+      line.productId === input.productId &&
+      line.size === input.size &&
+      line.color === input.color,
+  );
+  const existingQty = existingLine?.quantity ?? 0;
+  const cap = Math.min(CART_MAX_QUANTITY, variant.stock);
+  if (existingQty + input.quantity > cap) {
+    throw Object.assign(
+      new Error(
+        `Only ${cap} units of ${product.name} (${input.color}, size ${input.size}) are currently available.`,
+      ),
+      { status: 409 },
+    );
+  }
+
+  const dedupeKey = `${customerId}:${input.productId}:${input.size}:${input.color}`;
+  const nowMs = Date.now();
+  const last = recentAdds.get(dedupeKey) ?? 0;
+  if (nowMs - last < ADD_DEDUPE_MS) {
+    return currentCart;
+  }
+  recentAdds.set(dedupeKey, nowMs);
   const now = new Date().toISOString();
+  const nextQty = existingQty + input.quantity;
+  const lineId = existingLine?.id ?? randomUUID();
 
   await withDbOrFile(
     async () => {
       const sb = getCommerceDb();
-      const { data: existing } = await sb
-        .from("cart_items")
-        .select("*")
-        .eq("customer_id", customerId)
-        .eq("product_id", input.productId)
-        .eq("size", input.size)
-        .eq("color", input.color)
-        .maybeSingle();
-
-      if (existing) {
-        const qty = Math.min(
-          20,
-          Number((existing as { quantity: number }).quantity) + input.quantity,
-        );
+      if (existingLine) {
         const { error } = await sb
           .from("cart_items")
-          .update({ quantity: qty, updated_at: now })
-          .eq("id", (existing as { id: string }).id);
+          .update({ quantity: nextQty, updated_at: now })
+          .eq("id", existingLine.id);
         if (error) throw error;
       } else {
         const { error } = await sb.from("cart_items").insert({
-          id: randomUUID(),
+          id: lineId,
           customer_id: customerId,
           product_id: input.productId,
           size: input.size,
@@ -522,11 +626,11 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
           c.color === input.color,
       );
       if (existing) {
-        existing.quantity = Math.min(20, existing.quantity + input.quantity);
+        existing.quantity = nextQty;
         existing.updatedAt = now;
       } else {
         store.cart.push({
-          id: randomUUID(),
+          id: lineId,
           customerId,
           productId: input.productId,
           size: input.size,
@@ -540,18 +644,42 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
     },
   );
 
-  return getCart(customerId);
+  const nextLine = buildCartLine(lineId, product, input.size, input.color, nextQty);
+  if (existingLine) {
+    return currentCart.map((line) => (line.id === existingLine.id ? nextLine : line));
+  }
+  return [...currentCart, nextLine];
 }
 
 export async function setCartItemQuantity(customerId: string, itemId: string, quantity: number) {
   if (quantity < 1) return removeCartItem(customerId, itemId);
+  const cart = await getCart(customerId);
+  const line = cart.find((row) => row.id === itemId);
+  let cap = CART_MAX_QUANTITY;
+  if (line) {
+    const variant = await getVariant(line.productId, line.color, line.size);
+    if (!variant || variant.stock <= 0) {
+      throw Object.assign(new Error("This product/variant is currently out of stock."), {
+        status: 409,
+      });
+    }
+    cap = Math.min(CART_MAX_QUANTITY, variant.stock);
+    if (quantity > cap) {
+      throw Object.assign(
+        new Error(
+          `Only ${cap} units of ${line.productName} (${line.color}, size ${line.size}) are currently available.`,
+        ),
+        { status: 409 },
+      );
+    }
+  }
   const now = new Date().toISOString();
   await withDbOrFile(
     async () => {
       const sb = getCommerceDb();
       const { error } = await sb
         .from("cart_items")
-        .update({ quantity: Math.min(20, quantity), updated_at: now })
+        .update({ quantity: Math.min(cap, quantity), updated_at: now })
         .eq("id", itemId)
         .eq("customer_id", customerId);
       if (error) throw error;
@@ -560,7 +688,7 @@ export async function setCartItemQuantity(customerId: string, itemId: string, qu
       const store = await readFileStore();
       const item = store.cart.find((c) => c.id === itemId && c.customerId === customerId);
       if (item) {
-        item.quantity = Math.min(20, quantity);
+        item.quantity = Math.min(cap, quantity);
         item.updatedAt = now;
         await writeFileStore(store);
       }
@@ -586,6 +714,100 @@ export async function removeCartItem(customerId: string, itemId: string) {
       await writeFileStore(store);
     },
   );
+  return getCart(customerId);
+}
+
+export async function setCartItemVariant(
+  customerId: string,
+  itemId: string,
+  size: string,
+  color: string,
+) {
+  const cart = await getCart(customerId);
+  const current = cart.find((line) => line.id === itemId);
+  if (!current) throw Object.assign(new Error("Cart item not found."), { status: 404 });
+  const product = await getProductById(current.productId);
+  if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
+  if (!product.sizes.includes(size)) {
+    throw Object.assign(new Error("This size is currently unavailable."), { status: 400 });
+  }
+  if (!product.colors.includes(color)) {
+    throw Object.assign(new Error("This colour is currently unavailable."), { status: 400 });
+  }
+  if (current.size === size && current.color === color) return cart;
+
+  const variant = await getVariant(current.productId, color, size);
+  if (!variant || variant.stock <= 0) {
+    throw Object.assign(new Error("This product/variant is currently out of stock."), {
+      status: 409,
+    });
+  }
+
+  const duplicate = cart.find(
+    (line) =>
+      line.id !== itemId &&
+      line.productId === current.productId &&
+      line.size === size &&
+      line.color === color,
+  );
+  const mergedQty = (duplicate?.quantity ?? 0) + current.quantity;
+  const cap = Math.min(CART_MAX_QUANTITY, variant.stock);
+  if (mergedQty > cap) {
+    throw Object.assign(
+      new Error(
+        `Only ${cap} units of ${product.name} (${color}, size ${size}) are currently available.`,
+      ),
+      { status: 409 },
+    );
+  }
+  const now = new Date().toISOString();
+
+  await withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      if (duplicate) {
+        const qty = Math.min(cap, duplicate.quantity + current.quantity);
+        const { error: updateError } = await sb
+          .from("cart_items")
+          .update({ quantity: qty, updated_at: now })
+          .eq("id", duplicate.id)
+          .eq("customer_id", customerId);
+        if (updateError) throw updateError;
+        const { error: deleteError } = await sb
+          .from("cart_items")
+          .delete()
+          .eq("id", itemId)
+          .eq("customer_id", customerId);
+        if (deleteError) throw deleteError;
+        return;
+      }
+      const { error } = await sb
+        .from("cart_items")
+        .update({ size, color, updated_at: now })
+        .eq("id", itemId)
+        .eq("customer_id", customerId);
+      if (error) throw error;
+    },
+    async () => {
+      const store = await readFileStore();
+      const item = store.cart.find((row) => row.id === itemId && row.customerId === customerId);
+      if (!item) return;
+      if (duplicate) {
+        const other = store.cart.find((row) => row.id === duplicate.id);
+        if (other) {
+          other.quantity = Math.min(cap, other.quantity + item.quantity);
+          other.updatedAt = now;
+        }
+        store.cart = store.cart.filter((row) => row.id !== itemId);
+      } else {
+        item.size = size;
+        item.color = color;
+        item.updatedAt = now;
+      }
+      await writeFileStore(store);
+    },
+  );
+
   return getCart(customerId);
 }
 
@@ -704,11 +926,36 @@ export async function removeWishlistItem(customerId: string, productId: string) 
 }
 
 export async function placeOrder(customer: CustomerPublic, input: CheckoutInput): Promise<Order> {
+  const checkoutId = input.checkoutId?.trim() || "";
+  if (checkoutId) {
+    const existing = await findOrderByCheckoutId(customer.id, checkoutId);
+    if (existing) return existing;
+    const key = `${customer.id}:${checkoutId}`;
+    const pending = inflightCheckouts.get(key);
+    if (pending) return pending;
+    const task = createPlacedOrder(customer, input, checkoutId);
+    inflightCheckouts.set(key, task);
+    try {
+      return await task;
+    } finally {
+      inflightCheckouts.delete(key);
+    }
+  }
+  return createPlacedOrder(customer, input, "");
+}
+
+async function createPlacedOrder(
+  customer: CustomerPublic,
+  input: CheckoutInput,
+  checkoutId: string,
+): Promise<Order> {
   let lines: CartLine[] = [];
+  const products = await getProducts();
+  const productById = new Map(products.map((product) => [product.id, product]));
 
   if (input.mode === "buy_now") {
     if (!input.buyNow) throw Object.assign(new Error("Buy Now item is required."), { status: 400 });
-    const product = await getProductById(input.buyNow.productId);
+    const product = productById.get(input.buyNow.productId);
     if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
     const unitPrice = parsePriceInr(product.price);
     lines = [
@@ -730,6 +977,49 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
   }
 
   if (!lines.length) throw Object.assign(new Error("Your cart is empty."), { status: 400 });
+
+  const purchaseIssues: string[] = [];
+  const resolvedVariants: { line: CartLine; variantId: string; sku: string }[] = [];
+  for (const line of lines) {
+    const product = productById.get(line.productId);
+    if (!product) {
+      purchaseIssues.push(`${line.productName} is no longer available.`);
+      continue;
+    }
+    if (!product.colors.includes(line.color) || !product.sizes.includes(line.size)) {
+      purchaseIssues.push(
+        `${line.productName} (${line.color}, size ${line.size}) is currently out of stock.`,
+      );
+      continue;
+    }
+    const variant = await getVariant(line.productId, line.color, line.size);
+    if (!variant || variant.stock <= 0) {
+      purchaseIssues.push(
+        `This product/variant is currently out of stock. ${line.productName} (${line.color}, size ${line.size}).`,
+      );
+      continue;
+    }
+    if (line.quantity > variant.stock) {
+      purchaseIssues.push(
+        `Only ${variant.stock} units of ${line.productName} (${line.color}, size ${line.size}) are currently available.`,
+      );
+    }
+    const livePrice = parsePriceInr(product.price);
+    if (livePrice !== line.unitPrice) {
+      purchaseIssues.push(
+        `The price of ${line.productName} has changed. Please review your cart before continuing.`,
+      );
+    }
+    resolvedVariants.push({ line, variantId: variant.id, sku: variant.sku });
+  }
+  if (purchaseIssues.length) {
+    throw Object.assign(
+      new Error(`Some items in your cart are no longer available. ${purchaseIssues.join(" ")}`),
+      {
+        status: 409,
+      },
+    );
+  }
 
   let address: CustomerAddress | null = null;
   if (input.addressId) {
@@ -761,8 +1051,32 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   const shippingCost = SHIPPING_COST_INR;
-  const discount = resolveIstefadaDiscount(input.promoCode, lines);
-  const totalAmount = subtotal + shippingCost - discount;
+  let couponQuote = await quoteCoupon({
+    code: input.promoCode,
+    customerId: customer.id,
+    lines,
+  });
+  if (
+    !couponQuote.ok &&
+    input.promoCode?.trim().toUpperCase() === ISTEFADA_PROMO_CODE
+  ) {
+    const fallback = resolveIstefadaDiscount(input.promoCode, lines);
+    if (fallback > 0) {
+      couponQuote = { ok: true, code: ISTEFADA_PROMO_CODE, discount: fallback };
+    }
+  }
+  if (input.promoCode?.trim() && !couponQuote.ok) {
+    throw Object.assign(new Error(couponQuote.error || "This coupon is not valid."), { status: 409 });
+  }
+  const bundleMatch = bestApplicableBundle(
+    await getBundleOffers(),
+    products,
+    lines.map((line) => line.productId),
+  );
+  const couponDiscount = couponQuote.ok ? couponQuote.discount : 0;
+  const bundleDiscount = bundleMatch?.view.savings ?? 0;
+  const discount = couponDiscount + bundleDiscount;
+  const totalAmount = Math.max(0, subtotal + shippingCost - discount);
   const now = new Date().toISOString();
   const orderId = randomUUID();
   const orderNumber = makeOrderNumber();
@@ -786,74 +1100,168 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
     totalAmount,
     paymentStatus: "pending",
     orderStatus: "placed",
+    inventoryState: "none",
+    promoCode: couponQuote.code || null,
+    couponDiscount,
+    bundleDiscount,
+    invoiceNumber: null,
+    paymentMethod: "prepaid",
+    trackingNumber: null,
+    carrier: null,
+    trackingUrl: null,
+    checkoutId: checkoutId || null,
     createdAt: now,
     updatedAt: now,
   };
 
-  const items: (OrderItem & { orderId: string })[] = lines.map((line) => ({
-    id: randomUUID(),
+  const items: (OrderItem & { orderId: string })[] = lines.map((line) => {
+    const resolved = resolvedVariants.find(
+      (row) =>
+        row.line.productId === line.productId &&
+        row.line.size === line.size &&
+        row.line.color === line.color,
+    );
+    return {
+      id: randomUUID(),
+      orderId,
+      productId: line.productId,
+      productName: line.productName,
+      productImage: line.productImage,
+      size: line.size,
+      color: line.color,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      lineTotal: line.lineTotal,
+      variantId: resolved?.variantId ?? null,
+      sku: resolved?.sku ?? null,
+    };
+  });
+
+  await deductOrderInventory(
     orderId,
-    productId: line.productId,
-    productName: line.productName,
-    productImage: line.productImage,
-    size: line.size,
-    color: line.color,
-    quantity: line.quantity,
-    unitPrice: line.unitPrice,
-    lineTotal: line.lineTotal,
-  }));
-
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error: orderError } = await sb.from("orders").insert({
-        id: orderBase.id,
-        order_number: orderBase.orderNumber,
-        customer_id: orderBase.customerId,
-        customer_name: orderBase.customerName,
-        customer_email: orderBase.customerEmail,
-        customer_phone: orderBase.customerPhone,
-        alternate_phone: orderBase.alternatePhone,
-        address_line1: orderBase.addressLine1,
-        address_line2: orderBase.addressLine2,
-        address_city: orderBase.addressCity,
-        address_state: orderBase.addressState,
-        address_pincode: orderBase.addressPincode,
-        subtotal: orderBase.subtotal,
-        shipping_cost: orderBase.shippingCost,
-        discount: orderBase.discount,
-        total_amount: orderBase.totalAmount,
-        payment_status: orderBase.paymentStatus,
-        order_status: orderBase.orderStatus,
-        created_at: orderBase.createdAt,
-        updated_at: orderBase.updatedAt,
-      });
-      if (orderError) throw orderError;
-
-      const { error: itemsError } = await sb.from("order_items").insert(
-        items.map((item) => ({
-          id: item.id,
-          order_id: item.orderId,
-          product_id: item.productId,
-          product_name: item.productName,
-          product_image: item.productImage,
-          size: item.size,
-          color: item.color,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          line_total: item.lineTotal,
-        })),
-      );
-      if (itemsError) throw itemsError;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.orders.push(orderBase);
-      store.orderItems.push(...items);
-      await writeFileStore(store);
-    },
+    orderNumber,
+    lines.map((line) => ({
+      productId: line.productId,
+      color: line.color,
+      size: line.size,
+      quantity: line.quantity,
+      productName: line.productName,
+    })),
   );
+  orderBase.inventoryState = "deducted";
 
+  try {
+    await withDbOrFile(
+      async () => {
+        const sb = getCommerceDb();
+        const orderPayload: Record<string, unknown> = {
+          id: orderBase.id,
+          order_number: orderBase.orderNumber,
+          customer_id: orderBase.customerId,
+          customer_name: orderBase.customerName,
+          customer_email: orderBase.customerEmail,
+          customer_phone: orderBase.customerPhone,
+          alternate_phone: orderBase.alternatePhone,
+          address_line1: orderBase.addressLine1,
+          address_line2: orderBase.addressLine2,
+          address_city: orderBase.addressCity,
+          address_state: orderBase.addressState,
+          address_pincode: orderBase.addressPincode,
+          subtotal: orderBase.subtotal,
+          shipping_cost: orderBase.shippingCost,
+          discount: orderBase.discount,
+          total_amount: orderBase.totalAmount,
+          payment_status: orderBase.paymentStatus,
+          order_status: orderBase.orderStatus,
+          inventory_state: orderBase.inventoryState,
+          promo_code: orderBase.promoCode,
+          coupon_discount: orderBase.couponDiscount,
+          bundle_discount: orderBase.bundleDiscount,
+          payment_method: orderBase.paymentMethod,
+          checkout_id: checkoutId || null,
+          created_at: orderBase.createdAt,
+          updated_at: orderBase.updatedAt,
+        };
+        let { error: orderError } = await sb.from("orders").insert(orderPayload);
+        if (orderError && /checkout_id/i.test(orderError.message ?? "")) {
+          delete orderPayload.checkout_id;
+          ({ error: orderError } = await sb.from("orders").insert(orderPayload));
+        }
+        if (orderError) throw orderError;
+
+        const { error: itemsError } = await sb.from("order_items").insert(
+          items.map((item) => ({
+            id: item.id,
+            order_id: item.orderId,
+            product_id: item.productId,
+            product_name: item.productName,
+            product_image: item.productImage,
+            size: item.size,
+            color: item.color,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            line_total: item.lineTotal,
+            variant_id: item.variantId,
+            sku: item.sku,
+          })),
+        );
+        if (itemsError) throw itemsError;
+      },
+      async () => {
+        const store = await readFileStore();
+        if (
+          checkoutId &&
+          store.orders.some((row) => row.customerId === customer.id && row.checkoutId === checkoutId)
+        ) {
+          throw Object.assign(new Error("duplicate key checkout_id"), { code: "23505" });
+        }
+        store.orders.push(orderBase);
+        store.orderItems.push(...items);
+        await writeFileStore(store);
+      },
+    );
+  } catch (error) {
+    await restoreOrderInventory(
+      orderId,
+      orderNumber,
+      lines.map((line) => ({
+        productId: line.productId,
+        color: line.color,
+        size: line.size,
+        quantity: line.quantity,
+      })),
+      "ORDER_RELEASED",
+    );
+    await withDbOrFile(
+      async () => {
+        const sb = getCommerceDb();
+        await sb.from("order_items").delete().eq("order_id", orderId);
+        await sb.from("orders").delete().eq("id", orderId);
+      },
+      async () => {
+        const store = await readFileStore();
+        store.orderItems = store.orderItems.filter((item) => item.orderId !== orderId);
+        store.orders = store.orders.filter((order) => order.id !== orderId);
+        await writeFileStore(store);
+      },
+    ).catch(() => undefined);
+    if (checkoutId && isUniqueConstraintError(error)) {
+      const existing = await findOrderByCheckoutId(customer.id, checkoutId);
+      if (existing) return existing;
+    }
+    throw error;
+  }
+
+  invalidateCatalogCache();
+  if (couponQuote.ok && couponQuote.couponId && couponDiscount > 0) {
+    await recordCouponRedemption({
+      couponId: couponQuote.couponId,
+      orderId,
+      customerId: customer.id,
+      code: couponQuote.code,
+      discount: couponDiscount,
+    });
+  }
   if (input.mode === "cart") await clearCart(customer.id);
 
   return { ...orderBase, items };
@@ -908,10 +1316,8 @@ export async function getOrderForCustomer(customerId: string, orderIdOrNumber: s
   return orders.find((o) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber) ?? null;
 }
 
-export async function trackOrder(orderNumber: string, email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
+export async function findOrderByNumber(orderNumber: string) {
   const normalizedNumber = orderNumber.trim().toUpperCase();
-
   const order = await withDbOrFile(
     async () => {
       const sb = getCommerceDb();
@@ -922,21 +1328,13 @@ export async function trackOrder(orderNumber: string, email: string) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const mapped = mapOrderRow(data as Record<string, unknown>);
-      if (mapped.customerEmail.toLowerCase() !== normalizedEmail) return null;
-      return mapped;
+      return mapOrderRow(data as Record<string, unknown>);
     },
     async () => {
       const store = await readFileStore();
-      const found = store.orders.find(
-        (o) =>
-          o.orderNumber.toUpperCase() === normalizedNumber &&
-          o.customerEmail.toLowerCase() === normalizedEmail,
-      );
-      return found ?? null;
+      return store.orders.find((o) => o.orderNumber.toUpperCase() === normalizedNumber) ?? null;
     },
   );
-
   if (!order) return null;
   const [full] = await attachItems([order]);
   return full ?? null;
@@ -966,15 +1364,92 @@ export async function getOrderById(orderId: string) {
   return orders.find((o) => o.id === orderId || o.orderNumber === orderId) ?? null;
 }
 
-export async function updateOrderStatus(orderId: string, orderStatus: string) {
+export async function ensureInvoiceNumber(orderId: string) {
+  const order = await getOrderById(orderId);
+  if (!order) throw Object.assign(new Error("Order not found."), { status: 404 });
+  if (order.invoiceNumber) return order;
+  const invoiceNumber = `INV-${order.orderNumber}`;
   const now = new Date().toISOString();
   await withDbOrFile(
     async () => {
       const sb = getCommerceDb();
       const { error } = await sb
         .from("orders")
-        .update({ order_status: orderStatus, updated_at: now })
-        .eq("id", orderId);
+        .update({ invoice_number: invoiceNumber, updated_at: now })
+        .eq("id", order.id);
+      if (error && /invoice_number/.test(error.message)) return;
+      if (error) throw error;
+    },
+    async () => {
+      const store = await readFileStore();
+      const found = store.orders.find((row) => row.id === order.id);
+      if (found) {
+        found.invoiceNumber = invoiceNumber;
+        found.updatedAt = now;
+        await writeFileStore(store);
+      }
+    },
+  );
+  return { ...order, invoiceNumber };
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  orderStatus: string,
+  extras?: {
+    paymentStatus?: string | undefined;
+    trackingNumber?: string | undefined;
+    carrier?: string | undefined;
+    trackingUrl?: string | undefined;
+  },
+) {
+  const existing = await getOrderById(orderId);
+  if (!existing) throw Object.assign(new Error("Order not found."), { status: 404 });
+  const now = new Date().toISOString();
+  const paymentStatus = extras?.paymentStatus?.trim() || existing.paymentStatus;
+  const trackingNumber =
+    extras?.trackingNumber === undefined ? existing.trackingNumber ?? null : extras.trackingNumber.trim() || null;
+  const carrier = extras?.carrier === undefined ? existing.carrier ?? null : extras.carrier.trim() || null;
+  const trackingUrl =
+    extras?.trackingUrl === undefined ? existing.trackingUrl ?? null : extras.trackingUrl.trim() || null;
+  let inventoryState = existing.inventoryState ?? "none";
+  if (RELEASE_ORDER_STATUSES.has(orderStatus) && inventoryState === "deducted") {
+    await restoreOrderInventory(
+      existing.id,
+      existing.orderNumber,
+      existing.items.map((item) => ({
+        productId: item.productId,
+        color: item.color,
+        size: item.size,
+        quantity: item.quantity,
+      })),
+      orderStatus === "returned" || paymentStatus === "refunded"
+        ? "ORDER_REFUNDED"
+        : "ORDER_CANCELLED",
+    );
+    inventoryState = "restored";
+    invalidateCatalogCache();
+  }
+  await withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      const payload: Record<string, unknown> = {
+        order_status: orderStatus,
+        payment_status: paymentStatus,
+        inventory_state: inventoryState,
+        tracking_number: trackingNumber,
+        carrier,
+        tracking_url: trackingUrl,
+        updated_at: now,
+      };
+      let { error } = await sb.from("orders").update(payload).eq("id", orderId);
+      if (error && /tracking_number|carrier|tracking_url/.test(error.message)) {
+        const { tracking_number: _a, carrier: _b, tracking_url: _c, ...rest } = payload;
+        void _a;
+        void _b;
+        void _c;
+        ({ error } = await sb.from("orders").update(rest).eq("id", orderId));
+      }
       if (error) throw error;
     },
     async () => {
@@ -982,6 +1457,11 @@ export async function updateOrderStatus(orderId: string, orderStatus: string) {
       const order = store.orders.find((o) => o.id === orderId);
       if (!order) throw Object.assign(new Error("Order not found."), { status: 404 });
       order.orderStatus = orderStatus;
+      order.paymentStatus = paymentStatus;
+      order.inventoryState = inventoryState;
+      order.trackingNumber = trackingNumber;
+      order.carrier = carrier;
+      order.trackingUrl = trackingUrl;
       order.updatedAt = now;
       await writeFileStore(store);
     },

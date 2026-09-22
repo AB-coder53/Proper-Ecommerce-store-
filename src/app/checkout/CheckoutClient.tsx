@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -10,18 +10,36 @@ import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  buildDisplayCartLines,
+  displayLineFromInput,
+  formatCartIssue,
+  validateDisplayCartLines,
+  type CartIssue,
+  type DisplayCartLine,
+} from "@/lib/cart-display";
 import { BUY_NOW_KEY } from "@/lib/commerce-constants";
-import type { CartItemInput, CustomerAddress, Order } from "@/lib/commerce-types";
-import { formatInr, parsePriceInr } from "@/lib/price";
+import type { CartItemInput, CartLine, CustomerAddress, Order } from "@/lib/commerce-types";
+import type { Product } from "@/lib/catalog-types";
+import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 
 export default function CheckoutClient() {
   const router = useRouter();
   const params = useSearchParams();
   const mode = params.get("mode") === "buy_now" ? "buy_now" : "cart";
-  const { customer, cart, openAuth, loading } = useCommerce();
-  const { products } = useCatalog();
-  const { hasOffer, promoCode, discountInr } = useIstefadaOffer();
+  const {
+    customer,
+    cart,
+    guestCart,
+    openAuth,
+    loading,
+    applySuccessfulOrder,
+    refreshSession,
+    openCart,
+  } = useCommerce();
+  const { products, refresh: refreshCatalog } = useCatalog();
+  const { hasOffer, promoCode } = useIstefadaOffer();
 
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
@@ -36,6 +54,20 @@ export default function CheckoutClient() {
   const [buyNow, setBuyNow] = useState<CartItemInput | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [issues, setIssues] = useState<CartIssue[]>([]);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponQuote, setCouponQuote] = useState<{
+    ok: boolean;
+    code: string;
+    discount: number;
+    error?: string;
+  } | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
+  const priceSnapshot = useRef<Record<string, number>>({});
+  const checkoutIdRef = useRef(
+    typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "",
+  );
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (mode === "buy_now") {
@@ -47,6 +79,10 @@ export default function CheckoutClient() {
       }
     }
   }, [mode]);
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
 
   useEffect(() => {
     if (!customer) return;
@@ -68,49 +104,148 @@ export default function CheckoutClient() {
 
   const lines = useMemo(() => {
     if (mode === "buy_now" && buyNow) {
-      const product = products.find((p) => p.id === buyNow.productId);
-      const unitPrice = parsePriceInr(product?.price);
-      return [
-        {
-          name: product?.name ?? buyNow.productId,
-          image: product?.image ?? "",
-          size: buyNow.size,
-          color: buyNow.color,
-          quantity: buyNow.quantity,
-          unitPrice,
-          lineTotal: unitPrice * buyNow.quantity,
-        },
-      ];
+      return [displayLineFromInput(buyNow, products)];
     }
-    return cart.map((line) => ({
-      name: line.productName,
-      image: line.productImage,
-      size: line.size,
-      color: line.color,
-      quantity: line.quantity,
-      unitPrice: line.unitPrice,
-      lineTotal: line.lineTotal,
-    }));
-  }, [mode, buyNow, products, cart]);
+    return buildDisplayCartLines({
+      customer: Boolean(customer),
+      cart,
+      guestCart,
+      products,
+    });
+  }, [mode, buyNow, customer, cart, guestCart, products]);
+
+  useEffect(() => {
+    if (!lines.length || Object.keys(priceSnapshot.current).length) return;
+    priceSnapshot.current = Object.fromEntries(lines.map((line) => [line.key, line.unitPrice]));
+  }, [lines]);
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const itemCount = lines.reduce((n, line) => n + line.quantity, 0);
-  const discount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
-  const total = Math.max(0, subtotal - discount);
+  const istefadaDiscount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
+  const previewDiscount = couponQuote?.ok ? couponQuote.discount : istefadaDiscount;
+  const previewCode = couponQuote?.ok ? couponQuote.code : hasOffer ? promoCode : "";
+  const total = Math.max(0, subtotal - previewDiscount);
+
+  const applyCoupon = async () => {
+    setCouponBusy(true);
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponInput,
+          lines: lines.map((line) => ({
+            productId: line.productId,
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+          })),
+        }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        code: string;
+        discount: number;
+        error?: string;
+      };
+      setCouponQuote(data);
+    } catch {
+      setCouponQuote({ ok: false, code: couponInput, discount: 0, error: "Could not validate coupon." });
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const collectFreshLines = async (): Promise<{
+    displayLines: DisplayCartLine[];
+    freshProducts: Product[];
+    foundIssues: CartIssue[];
+  }> => {
+    const [catalogRes, cartRes] = await Promise.all([
+      fetch("/api/catalog?live=1", { cache: "no-store" }),
+      customer && mode !== "buy_now"
+        ? fetch("/api/customer/cart")
+        : Promise.resolve(null),
+    ]);
+    const catalogData = catalogRes.ok
+      ? ((await catalogRes.json()) as { products?: Product[] })
+      : { products };
+    const freshProducts = catalogData.products ?? products;
+
+    let displayLines: DisplayCartLine[];
+    if (mode === "buy_now" && buyNow) {
+      displayLines = [displayLineFromInput(buyNow, freshProducts)];
+    } else if (customer) {
+      const cartData =
+        cartRes && cartRes.ok
+          ? ((await cartRes.json()) as { items?: CartLine[] })
+          : { items: cart };
+      displayLines = buildDisplayCartLines({
+        customer: true,
+        cart: cartData.items ?? cart,
+        guestCart: [],
+        products: freshProducts,
+      });
+    } else {
+      displayLines = buildDisplayCartLines({
+        customer: false,
+        cart: [],
+        guestCart,
+        products: freshProducts,
+      });
+    }
+
+    const foundIssues = validateDisplayCartLines(displayLines, freshProducts);
+    for (const line of displayLines) {
+      const previousPrice = priceSnapshot.current[line.key];
+      if (previousPrice != null && previousPrice !== line.unitPrice) {
+        foundIssues.push({
+          key: `${line.key}-price`,
+          productId: line.productId,
+          name: line.name,
+          size: line.size,
+          color: line.color,
+          type: "price",
+          message: `The price of ${line.name} has changed. Please review your cart before continuing.`,
+        });
+      }
+    }
+    priceSnapshot.current = Object.fromEntries(
+      displayLines.map((line) => [line.key, line.unitPrice]),
+    );
+    return { displayLines, freshProducts, foundIssues };
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!customer) return;
+    if (!customer || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError("");
+    setIssues([]);
     try {
+      const { foundIssues } = await collectFreshLines();
+      if (foundIssues.length) {
+        await refreshCatalog(true);
+        await refreshSession();
+        setIssues(foundIssues);
+        setError(
+          foundIssues.some((issue) => issue.type !== "price")
+            ? "Some items in your cart are no longer available."
+            : "Please review the updated prices before continuing.",
+        );
+        return;
+      }
+      const submittedPromo = couponQuote?.ok
+        ? couponQuote.code
+        : couponInput.trim() || (hasOffer ? promoCode : undefined);
+      const checkoutId = checkoutIdRef.current || undefined;
       const payload =
         useNewAddress || !selectedAddressId
           ? {
               mode,
               buyNow: mode === "buy_now" ? buyNow : undefined,
               alternatePhone,
-              promoCode: hasOffer ? promoCode : undefined,
+              promoCode: submittedPromo,
+              ...(checkoutId ? { checkoutId } : {}),
               address: {
                 label,
                 line1,
@@ -126,7 +261,8 @@ export default function CheckoutClient() {
               buyNow: mode === "buy_now" ? buyNow : undefined,
               alternatePhone,
               addressId: selectedAddressId,
-              promoCode: hasOffer ? promoCode : undefined,
+              promoCode: submittedPromo,
+              ...(checkoutId ? { checkoutId } : {}),
             };
 
       const res = await fetch("/api/orders", {
@@ -136,14 +272,19 @@ export default function CheckoutClient() {
       });
       const data = (await res.json()) as { order?: Order; error?: string };
       if (!res.ok || !data.order) {
-        setError(data.error || "Could not place order.");
+        if (res.status === 409 && typeof crypto !== "undefined" && "randomUUID" in crypto) {
+          checkoutIdRef.current = crypto.randomUUID();
+        }
+        setError(data.error || "Could not place order. Your cart is unchanged.");
         return;
       }
       sessionStorage.removeItem(BUY_NOW_KEY);
+      await applySuccessfulOrder(data.order, mode);
       router.push(`/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}`);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -200,18 +341,18 @@ export default function CheckoutClient() {
         Confirm your details and delivery address to place the order.
       </p>
 
-      <form onSubmit={submit} className="mt-10 grid gap-10 lg:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-8">
-          <section className="rounded-3xl border border-border p-6">
+      <form onSubmit={submit} className="mt-10 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="min-w-0 space-y-8">
+          <section className="min-w-0 rounded-3xl border border-border p-4 sm:p-6">
             <h2 className="font-display text-2xl font-bold">Customer details</h2>
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Name</dt>
-                <dd className="font-medium">{customer.fullName}</dd>
+                <dt className="shrink-0 text-muted-foreground">Name</dt>
+                <dd className="min-w-0 break-words text-right font-medium">{customer.fullName}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Email</dt>
-                <dd className="font-medium break-all">{customer.email}</dd>
+                <dt className="shrink-0 text-muted-foreground">Email</dt>
+                <dd className="min-w-0 break-all text-right font-medium">{customer.email}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted-foreground">Primary phone</dt>
@@ -230,13 +371,13 @@ export default function CheckoutClient() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-border p-6">
+          <section className="min-w-0 rounded-3xl border border-border p-4 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-2xl font-bold">Delivery address</h2>
               {addresses.length ? (
                 <button
                   type="button"
-                  className="text-xs font-semibold tracking-[0.1em] text-teal uppercase"
+                  className="inline-flex min-h-11 items-center text-xs font-semibold tracking-[0.1em] text-teal uppercase"
                   onClick={() => setUseNewAddress((v) => !v)}
                 >
                   {useNewAddress ? "Use saved" : "New address"}
@@ -335,11 +476,11 @@ export default function CheckoutClient() {
           </section>
         </div>
 
-        <aside className="h-fit rounded-3xl border border-border bg-sand p-6">
+        <aside className="h-fit min-w-0 rounded-3xl border border-border bg-sand p-4 sm:p-6">
           <h2 className="font-display text-2xl font-bold">Order</h2>
           <ul className="mt-4 space-y-4">
             {lines.map((line) => (
-              <li key={`${line.name}-${line.size}-${line.color}`} className="flex gap-3 text-sm">
+              <li key={line.key} className="flex gap-3 text-sm">
                 <img
                   src={line.image}
                   alt=""
@@ -371,6 +512,29 @@ export default function CheckoutClient() {
             ))}
           </ul>
           <div className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
+            <div className="flex gap-2">
+              <Input
+                value={couponInput}
+                onChange={(e) => {
+                  setCouponInput(e.target.value);
+                  setCouponQuote(null);
+                }}
+                placeholder="Coupon code"
+                className="h-11 rounded-full"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={couponBusy || !couponInput.trim()}
+                onClick={() => void applyCoupon()}
+                className="h-11 shrink-0 rounded-full"
+              >
+                {couponBusy ? <Loader2 className="size-4 animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+            {couponQuote && !couponQuote.ok ? (
+              <p className="text-xs text-destructive">{couponQuote.error || "This coupon is not valid."}</p>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
               <span>{formatInr(subtotal)}</span>
@@ -379,12 +543,10 @@ export default function CheckoutClient() {
               <span className="text-muted-foreground">Shipping</span>
               <span>Free</span>
             </div>
-            {discount > 0 ? (
+            {previewDiscount > 0 ? (
               <div className="flex justify-between text-teal">
-                <span>
-                  Istefada ₹{discountInr} × {itemCount}
-                </span>
-                <span>-{formatInr(discount)}</span>
+                <span>{previewCode || "Discount"}</span>
+                <span>-{formatInr(previewDiscount)}</span>
               </div>
             ) : null}
             <div className="flex justify-between text-base font-bold">
@@ -392,13 +554,47 @@ export default function CheckoutClient() {
               <span className="text-teal">{formatInr(total)}</span>
             </div>
           </div>
-          {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="mt-4 text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {issues.length ? (
+            <>
+              <ul className="mt-3 space-y-2 text-sm text-destructive" role="alert">
+                {issues.map((issue) => (
+                  <li
+                    key={`${issue.key}-${issue.type}`}
+                    className="rounded-2xl border border-destructive/30 bg-background px-3 py-2"
+                  >
+                    <p className="font-medium">{formatCartIssue(issue)}</p>
+                    <p className="mt-1 text-xs leading-relaxed">{issue.message}</p>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openCart}
+                className="mt-3 h-11 w-full rounded-full text-xs font-semibold tracking-[0.12em] uppercase"
+              >
+                Review cart
+              </Button>
+            </>
+          ) : null}
           <Button
             type="submit"
             disabled={submitting}
             className="mt-6 h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.12em] text-teal-foreground uppercase"
           >
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : "Place Order"}
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" />
+                Placing order...
+              </>
+            ) : (
+              "Place Order"
+            )}
           </Button>
           <p className="mt-3 text-center text-xs text-muted-foreground">
             Payment is prepaid at confirmation. No charge is taken on this page yet.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
 
 import { ProductCard } from "@/components/site/ProductCard";
+import { ProductImage } from "@/components/site/ProductImage";
 import { Reveal } from "@/components/Reveal";
 import { Button } from "@/components/ui/button";
 import type { Collection, Product } from "@/lib/catalog-types";
@@ -53,35 +54,29 @@ export function HomeHero({ products }: { products: Product[] }) {
           >
             <Link href="/collection">Shop Collection</Link>
           </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="h-12 w-full rounded-full border-foreground px-8 text-sm font-semibold tracking-[0.12em] uppercase sm:w-auto"
-          >
-            <Link href="/cart">View Cart</Link>
-          </Button>
         </div>
       </div>
 
-      {/* Fan lookbook: slight overspill on xs so five cards match desktop composition */}
-      <div className="relative mx-auto mt-12 flex w-[112%] max-w-none -translate-x-[6%] items-end justify-center gap-1.5 sm:mt-16 sm:w-full sm:max-w-6xl sm:translate-x-0 sm:gap-4 md:gap-5">
+      <div className="relative mx-auto mt-12 flex w-full max-w-6xl items-end justify-center gap-1.5 overflow-hidden sm:mt-16 sm:gap-4 md:gap-5">
         {images.map((src, index) => {
           const tilt = rotations[index % rotations.length] ?? 0;
           return (
             <div
               key={`${src}-${index}`}
-              className="animate-fan-in w-[18%] max-w-[11rem] origin-bottom"
+              className="animate-fan-in w-[18%] max-w-[11rem] min-w-0 origin-bottom"
               style={{ animationDelay: `${260 + index * 80}ms` }}
             >
               <div
                 className="overflow-hidden rounded-xl bg-muted shadow-[0_14px_32px_rgba(0,0,0,0.12)] transition-transform duration-500 [transform:rotate(calc(var(--tilt)*0.55))] hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.55))] sm:rounded-2xl sm:shadow-[0_18px_40px_rgba(0,0,0,0.12)] sm:[transform:rotate(var(--tilt))] sm:hover:[transform:translateY(-0.5rem)_rotate(var(--tilt))]"
                 style={{ ["--tilt" as string]: `${tilt}deg` }}
               >
-                <img
+                <ProductImage
                   src={src}
                   alt="AB Collection premium tee lookbook"
                   width={440}
                   height={586}
+                  sizes="(max-width: 640px) 20vw, 176px"
+                  priority={index < 3}
                   className="aspect-[3/4] w-full object-cover object-top"
                 />
               </div>
@@ -114,13 +109,14 @@ export function HomeDiscover({ collections }: { collections: Collection[] }) {
                 className={`${category.tint} overflow-hidden rounded-[1.75rem] p-4 pb-5 shadow-sm`}
               >
                 <Link href={href} className="block overflow-hidden rounded-[1.25rem] bg-white/40">
-                  <img
-                    src={category.image}
-                    alt={`${category.title} tees from AB Collection`}
-                    width={640}
-                    height={800}
-                    className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
-                  />
+                <ProductImage
+                  src={category.image}
+                  alt={`${category.title} tees from AB Collection`}
+                  width={640}
+                  height={800}
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
+                />
                 </Link>
                 <Button
                   asChild
@@ -214,7 +210,7 @@ export function HomeCommunity({ products }: { products: Product[] }) {
           } ${positions[index]}`}
           style={{ animationDelay: `${index * 0.35}s` }}
         >
-          <img src={src} alt="" className="h-full w-full object-cover object-top" />
+          <ProductImage src={src} alt="" width={160} height={160} sizes="80px" className="h-full w-full object-cover object-top" />
         </div>
       ))}
 

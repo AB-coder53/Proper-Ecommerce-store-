@@ -1,13 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { ImageUploadField, ListField, SizeChartField } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/catalog-types";
 import { SIZES } from "@/lib/catalog-types";
+import { variantMatrix } from "@/lib/inventory";
+import type { ProductBadge } from "@/lib/promotions";
 
 const emptyProduct = (): Product => ({
   id: "",
@@ -21,10 +23,13 @@ const emptyProduct = (): Product => ({
   colors: [],
   sizes: [...SIZES],
   price: "",
+  compareAtPrice: "",
   badge: "",
+  badgeIds: [],
   sizeChart: "",
   featured: true,
   sortOrder: 0,
+  variants: [],
 });
 
 export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initial?: Product }) {
@@ -32,9 +37,29 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
   const [form, setForm] = useState<Product>(initial ?? emptyProduct());
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [badges, setBadges] = useState<ProductBadge[]>([]);
+  const inventoryRows = variantMatrix(form);
+
+  useEffect(() => {
+    void fetch("/api/admin/badges")
+      .then((res) => res.json())
+      .then((data: { badges?: ProductBadge[] }) => setBadges(data.badges ?? []))
+      .catch(() => setBadges([]));
+  }, []);
 
   const set = <K extends keyof Product>(key: K, value: Product[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const setStock = (color: string, size: string, stock: number) => {
+    setForm((prev) => ({
+      ...prev,
+      variants: variantMatrix(prev).map((row) =>
+        row.color === color && row.size === size
+          ? { ...row, stock: Number.isFinite(stock) ? Math.max(0, Math.floor(stock)) : 0 }
+          : row,
+      ),
+    }));
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,7 +71,10 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
         images: form.images.length ? form.images : form.image ? [form.image] : [],
         image: form.image || form.images[0] || "",
         badge: form.badge || "",
+        badgeIds: form.badgeIds ?? [],
+        compareAtPrice: form.compareAtPrice || "",
         sizeChart: form.sizeChart || "",
+        variants: variantMatrix(form),
       };
       const res = await fetch(
         mode === "create" ? "/api/admin/products" : `/api/admin/products/${form.id}`,
@@ -86,6 +114,12 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
           onChange={(v) => set("price", v)}
           required
           placeholder="₹799/-"
+        />
+        <Field
+          label="Compare-at price (optional)"
+          value={form.compareAtPrice ?? ""}
+          onChange={(v) => set("compareAtPrice", v)}
+          placeholder="₹999/-"
         />
         <Field label="Tagline" value={form.tagline} onChange={(v) => set("tagline", v)} required />
         <Field
@@ -131,7 +165,76 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
       <ListField label="Details" value={form.details} onChange={(v) => set("details", v)} />
       <ListField label="Colors" value={form.colors} onChange={(v) => set("colors", v)} />
       <ListField label="Sizes" value={form.sizes} onChange={(v) => set("sizes", v)} />
+      {badges.length ? (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Badges</p>
+          <div className="flex flex-wrap gap-3">
+            {badges.map((badge) => {
+              const checked = (form.badgeIds ?? []).includes(badge.id);
+              return (
+                <label key={badge.id} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(event) => {
+                      const next = new Set(form.badgeIds ?? []);
+                      if (event.target.checked) next.add(badge.id);
+                      else next.delete(badge.id);
+                      set("badgeIds", [...next]);
+                    }}
+                  />
+                  {badge.label}
+                  {!badge.active ? <span className="text-xs text-muted-foreground">(inactive)</span> : null}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
       <SizeChartField value={form.sizeChart ?? ""} onChange={(v) => set("sizeChart", v)} />
+
+      {inventoryRows.length ? (
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium">Inventory</p>
+            <p className="text-xs text-muted-foreground">
+              Stock is tracked per colour and size. Set 0 to mark a variant out of stock.
+            </p>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-muted/60 text-left text-xs tracking-[0.08em] text-muted-foreground uppercase">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Colour</th>
+                  <th className="px-4 py-3 font-medium">Size</th>
+                  <th className="px-4 py-3 text-right font-medium">Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventoryRows.map((row) => (
+                  <tr key={`${row.color}-${row.size}`} className="border-t border-border">
+                    <td className="px-4 py-2">{row.color}</td>
+                    <td className="px-4 py-2">{row.size}</td>
+                    <td className="px-4 py-2 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        max={99999}
+                        required
+                        value={row.stock}
+                        onChange={(event) =>
+                          setStock(row.color, row.size, Number(event.target.value))
+                        }
+                        className="h-10 w-24 rounded-xl border border-border px-3 text-right text-sm"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 

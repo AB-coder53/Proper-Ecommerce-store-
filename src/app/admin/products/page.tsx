@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/AdminShell";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 import { ProductsTable } from "@/components/admin/ProductsTable";
 import { getAdminSession } from "@/lib/admin-auth.server";
 import { getProducts } from "@/lib/catalog.server";
@@ -28,12 +29,16 @@ export default async function AdminProductsPage() {
             Create, edit, or delete catalogue items.
           </p>
         </div>
-        <Link
-          href="/admin/products/new"
-          className="inline-flex h-11 items-center rounded-full bg-teal px-5 text-sm font-semibold text-teal-foreground"
-        >
-          Add product
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <ExportCsvButton type="products" label="Export products CSV" />
+          <ExportCsvButton type="inventory" label="Export inventory CSV" />
+          <Link
+            href="/admin/products/new"
+            className="inline-flex h-11 items-center rounded-full bg-teal px-5 text-sm font-semibold text-teal-foreground"
+          >
+            Add product
+          </Link>
+        </div>
       </div>
       <div className="mt-8">
         <ProductsTable products={products} />

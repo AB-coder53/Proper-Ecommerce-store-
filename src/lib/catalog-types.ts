@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import type { ProductBadge } from "@/lib/promotions";
+import { variantMatrix } from "@/lib/inventory";
+
 export const productSchema = z.object({
   id: z
     .string()
@@ -17,10 +20,24 @@ export const productSchema = z.object({
   colors: z.array(z.string().trim().min(1).max(40)).min(1).max(20),
   sizes: z.array(z.string().trim().min(1).max(10)).min(1).max(20),
   price: z.string().trim().min(1).max(40),
+  compareAtPrice: z.string().trim().max(40).optional().or(z.literal("")),
   badge: z.string().trim().max(40).optional().or(z.literal("")),
+  badgeIds: z.array(z.string().trim().min(1).max(40)).max(12).optional().default([]),
   sizeChart: z.string().trim().max(500).optional().or(z.literal("")),
   featured: z.boolean().default(true),
   sortOrder: z.number().int().min(0).max(9999).default(0),
+  variants: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        sku: z.string().optional(),
+        color: z.string().trim().min(1).max(40),
+        size: z.string().trim().min(1).max(10),
+        stock: z.number().int().min(0).max(99999),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 export const collectionSchema = z.object({
@@ -37,7 +54,18 @@ export const collectionSchema = z.object({
   sortOrder: z.number().int().min(0).max(9999).default(0),
 });
 
-export type Product = z.infer<typeof productSchema>;
+export type ProductVariant = {
+  id: string;
+  sku: string;
+  color: string;
+  size: string;
+  stock: number;
+};
+
+export type Product = Omit<z.infer<typeof productSchema>, "variants"> & {
+  variants: ProductVariant[];
+  badges?: ProductBadge[];
+};
 export type Collection = z.infer<typeof collectionSchema>;
 
 export type Catalog = {
@@ -47,3 +75,10 @@ export type Catalog = {
 
 export const SIZES = ["S", "M", "L", "XL", "XXL"];
 export const SIZES_S_XL = ["S", "M", "L", "XL"];
+
+export function asProduct(input: z.infer<typeof productSchema>): Product {
+  return {
+    ...input,
+    variants: variantMatrix(input),
+  };
+}

@@ -1,38 +1,78 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, Minus, Plus } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { CatalogPrice } from "@/components/site/CatalogPrice";
+import { ProductBadgeList } from "@/components/site/ProductBadgeList";
+import { ProductBundleOffers } from "@/components/site/ProductBundleOffers";
+import { ProductDeliveryEstimate } from "@/components/site/ProductDeliveryEstimate";
+import { ProductImage } from "@/components/site/ProductImage";
+import { ProductReviews } from "@/components/site/ProductReviews";
+import { ProductVariantPicker } from "@/components/site/ProductVariantPicker";
+import { StarRating } from "@/components/site/StarRating";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { addToCartLabel, useAddToCart } from "@/hooks/use-add-to-cart";
+import { useProductInventory } from "@/hooks/use-product-inventory";
 import type { Product } from "@/lib/catalog-types";
-import { getDiscountedPriceLabel } from "@/lib/istefada-offer";
-import { colorSwatchClass, colorToImageIndex, indexToColor } from "@/lib/product-colors";
+import { availableStock, productHasPurchasableStock, quantityCap, variantHasStock } from "@/lib/inventory";
+import { colorToImageIndex, indexToColor } from "@/lib/product-colors";
+import { isValidProductVariant } from "@/lib/product-variants";
+import type { ReviewSummary } from "@/lib/reviews";
+import type { DeliveryEstimate } from "@/lib/shipping";
+import type { BundleOfferView } from "@/lib/store-offers";
 import { cn } from "@/lib/utils";
 
-export function ProductDetail({ product }: { product: Product }) {
-  const images = product.images?.length ? product.images : [product.image];
+export function ProductDetail({
+  product,
+  bundles,
+  delivery,
+  reviewSummary,
+}: {
+  product: Product;
+  bundles: BundleOfferView[];
+  delivery: DeliveryEstimate;
+  reviewSummary?: ReviewSummary | undefined;
+}) {
+  const liveProduct = useProductInventory(product);
+  const images = liveProduct.images?.length ? liveProduct.images : [liveProduct.image];
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(product.colors[0] ?? "");
   const [selectedSize, setSelectedSize] = useState(product.sizes[0] ?? "M");
+  const [quantity, setQuantity] = useState(1);
   const [sizeChartOpen, setSizeChartOpen] = useState(false);
-  const { addToCart, buyNow, toggleWishlist, wishlistIds } = useCommerce();
+  const { buyNow, toggleWishlist, wishlistIds } = useCommerce();
+  const { status, error, run, isBusy } = useAddToCart();
   const { hasOffer } = useIstefadaOffer();
   const wished = wishlistIds.has(product.id);
-  const hasSizeChart = Boolean(product.sizeChart?.trim());
-  const priced = getDiscountedPriceLabel(product.price);
+  const hasSizeChart = Boolean(liveProduct.sizeChart?.trim());
+  const stock = availableStock(liveProduct, selectedColor, selectedSize);
+  const productSoldOut = !productHasPurchasableStock(liveProduct);
+  const inStock = stock > 0;
+  const maxQty = Math.max(1, quantityCap(stock) || 1);
+  const variantReady = isValidProductVariant(liveProduct, selectedColor, selectedSize);
+  const canPurchase = variantReady && inStock;
+
+  useEffect(() => {
+    setQuantity((current) => Math.min(current, maxQty));
+  }, [maxQty]);
 
   const selectColor = (color: string) => {
     setSelectedColor(color);
-    setSelectedImageIndex(colorToImageIndex(color, product.colors, images));
+    setSelectedImageIndex(colorToImageIndex(color, liveProduct.colors, images));
+    if (!variantHasStock(liveProduct, color, selectedSize)) {
+      const nextSize = liveProduct.sizes.find((size) => variantHasStock(liveProduct, color, size));
+      if (nextSize) setSelectedSize(nextSize);
+    }
   };
 
   const selectImageIndex = (index: number) => {
     setSelectedImageIndex(index);
-    setSelectedColor(indexToColor(index, product.colors, images));
+    setSelectedColor(indexToColor(index, liveProduct.colors, images));
   };
 
   const go = (dir: number) => {
@@ -40,19 +80,26 @@ export function ProductDetail({ product }: { product: Product }) {
     selectImageIndex(next);
   };
 
-  const activeImage = images[selectedImageIndex] ?? product.image;
-  const selected = { productId: product.id, size: selectedSize, color: selectedColor, quantity: 1 };
+  const activeImage = images[selectedImageIndex] ?? liveProduct.image;
+  const selected = {
+    productId: liveProduct.id,
+    size: selectedSize,
+    color: selectedColor,
+    quantity,
+  };
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-10 px-5 py-12 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-20">
-      <div>
+    <div className="mx-auto grid min-w-0 max-w-7xl gap-10 px-5 py-12 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-20">
+      <div className="min-w-0">
         <div className="relative overflow-hidden rounded-3xl bg-muted">
-          <img
+          <ProductImage
             key={`${selectedImageIndex}-${activeImage}`}
             src={activeImage}
             alt={`${product.name} — ${selectedColor || product.fabric}`}
             width={1120}
             height={1400}
+            sizes="(max-width: 1024px) 100vw, 50vw"
+            priority
             className="aspect-[4/5] w-full object-cover object-top transition-opacity duration-300"
           />
           {images.length > 1 ? (
@@ -61,7 +108,7 @@ export function ProductDetail({ product }: { product: Product }) {
                 type="button"
                 aria-label="Previous image"
                 onClick={() => go(-1)}
-                className="absolute top-1/2 left-3 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
+                className="absolute top-1/2 left-3 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -69,7 +116,7 @@ export function ProductDetail({ product }: { product: Product }) {
                 type="button"
                 aria-label="Next image"
                 onClick={() => go(1)}
-                className="absolute top-1/2 right-3 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
+                className="absolute top-1/2 right-3 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow"
               >
                 <ChevronRight className="size-4" />
               </button>
@@ -95,9 +142,12 @@ export function ProductDetail({ product }: { product: Product }) {
                       : "opacity-70 hover:opacity-100",
                   )}
                 >
-                  <img
+                  <ProductImage
                     src={src}
                     alt={`${product.name} ${thumbColor}`}
+                    width={240}
+                    height={240}
+                    sizes="25vw"
                     className="aspect-square w-full object-cover object-top"
                   />
                 </button>
@@ -126,9 +176,19 @@ export function ProductDetail({ product }: { product: Product }) {
         <div className="mt-8 flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">{product.fabric}</p>
-            <h1 className="mt-3 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+            <h1 className="mt-3 font-display text-[clamp(1.75rem,8vw,3rem)] font-bold tracking-tight sm:text-5xl">
               {product.name}
             </h1>
+            <ProductBadgeList product={liveProduct} className="mt-3" />
+            {reviewSummary && reviewSummary.count > 0 ? (
+              <a href="#reviews" className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+                <StarRating value={Math.round(reviewSummary.average)} size="sm" />
+                <span>
+                  {reviewSummary.average.toFixed(1)} · {reviewSummary.count} review
+                  {reviewSummary.count === 1 ? "" : "s"}
+                </span>
+              </a>
+            ) : null}
           </div>
           <button
             type="button"
@@ -145,17 +205,12 @@ export function ProductDetail({ product }: { product: Product }) {
           </button>
         </div>
 
-        {hasOffer && priced.final > 0 ? (
-          <div className="mt-4">
-            <p className="text-sm text-muted-foreground line-through">{priced.originalLabel}</p>
-            <p className="text-2xl font-semibold text-teal">{priced.finalLabel}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Istefada ₹{priced.original - priced.final} off applied
-            </p>
-          </div>
-        ) : (
-          <p className="mt-4 text-2xl font-semibold text-teal">{product.price}</p>
-        )}
+        <div className="mt-4">
+          <CatalogPrice product={liveProduct} hasOffer={hasOffer} align="left" size="detail" />
+          {productSoldOut ? (
+            <p className="mt-2 text-sm text-muted-foreground">This product is currently sold out.</p>
+          ) : null}
+        </div>
 
         <p className="mt-6 text-base leading-relaxed text-muted-foreground">
           {product.description}
@@ -171,96 +226,95 @@ export function ProductDetail({ product }: { product: Product }) {
         </ul>
 
         <div className="mt-8 space-y-6">
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                Colour
-              </p>
-              {hasSizeChart ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSizeChartOpen(true)}
-                  className="h-9 rounded-full px-4 text-xs font-semibold tracking-[0.12em] uppercase"
-                >
-                  Size Chart
-                </Button>
-              ) : null}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {product.colors.map((color) => {
-                const selectedSwatch = color === selectedColor;
-                return (
-                  <button
-                    key={color}
-                    type="button"
-                    aria-pressed={selectedSwatch}
-                    onClick={() => selectColor(color)}
-                    className={cn(
-                      "inline-flex items-center gap-2.5 rounded-full border px-4 py-2 text-sm transition-colors outline-none focus-visible:ring-0",
-                      selectedSwatch
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-background hover:border-foreground",
-                    )}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "size-4 shrink-0 rounded-full",
-                        colorSwatchClass(color),
-                        selectedSwatch ? "ring-2 ring-background/80" : "",
-                      )}
-                    />
-                    {color}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-              Size
+              Options
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {product.sizes.map((size) => {
-                const selectedSizeChip = size === selectedSize;
-                return (
-                  <button
-                    key={size}
-                    type="button"
-                    aria-pressed={selectedSizeChip}
-                    onClick={() => setSelectedSize(size)}
-                    className={cn(
-                      "inline-flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-0",
-                      selectedSizeChip
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border hover:border-foreground",
-                    )}
-                  >
-                    {size}
-                  </button>
-                );
-              })}
-            </div>
+            {hasSizeChart ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSizeChartOpen(true)}
+                className="h-11 rounded-full px-4 text-xs font-semibold tracking-[0.12em] uppercase"
+              >
+                Size Chart
+              </Button>
+            ) : null}
+          </div>
+          <ProductVariantPicker
+            product={liveProduct}
+            selectedColor={selectedColor}
+            selectedSize={selectedSize}
+            onColorChange={selectColor}
+            onSizeChange={setSelectedSize}
+          />
+        </div>
+
+        <div className="mt-6">
+          <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+            Quantity
+          </p>
+          <div
+            className="mt-3 inline-flex items-center gap-1 rounded-full border border-border px-1 py-1"
+            aria-label="Quantity"
+          >
+            <button
+              type="button"
+              aria-label="Decrease quantity"
+              disabled={!inStock || quantity <= 1}
+              onClick={() => setQuantity((current) => Math.max(1, current - 1))}
+              className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40"
+            >
+              <Minus className="size-3.5" />
+            </button>
+            <span className="min-w-8 text-center text-sm font-medium" aria-live="polite">
+              {quantity}
+            </span>
+            <button
+              type="button"
+              aria-label="Increase quantity"
+              disabled={!inStock || quantity >= maxQty}
+              onClick={() => setQuantity((current) => Math.min(maxQty, current + 1))}
+              className="inline-flex size-11 items-center justify-center rounded-full hover:bg-muted disabled:opacity-40"
+            >
+              <Plus className="size-3.5" />
+            </button>
           </div>
         </div>
+
+        <ProductDeliveryEstimate estimate={delivery} />
 
         <div className="mt-10 grid gap-3 sm:grid-cols-2">
           <Button
             onClick={() => void buyNow(selected)}
+            disabled={!canPurchase}
             className="h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.14em] text-teal-foreground uppercase hover:bg-teal/90"
           >
-            Buy Now
+            {inStock ? "Buy Now" : "Out of Stock"}
           </Button>
           <Button
-            onClick={() => void addToCart(selected)}
+            type="button"
+            disabled={isBusy || !canPurchase}
+            onClick={() => void run(selected)}
             variant="outline"
             className="h-12 w-full rounded-full border-foreground text-xs font-semibold tracking-[0.14em] uppercase"
           >
-            Add to Cart
+            {inStock ? addToCartLabel(status) : "Out of Stock"}
           </Button>
         </div>
+        {!inStock && variantReady ? (
+          <p className="mt-3 text-sm text-destructive">
+            This product/variant is currently out of stock.
+          </p>
+        ) : null}
+        {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+
+        <ProductBundleOffers bundles={bundles} />
+
+        <ProductReviews
+          productId={product.id}
+          {...(reviewSummary ? { initialSummary: reviewSummary } : {})}
+        />
 
         <div className="mt-4">
           <Button
@@ -275,7 +329,7 @@ export function ProductDetail({ product }: { product: Product }) {
 
       {hasSizeChart ? (
         <Dialog open={sizeChartOpen} onOpenChange={setSizeChartOpen}>
-          <DialogContent className="flex max-h-[min(90vh,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
+          <DialogContent className="flex max-h-[min(90vh,calc(100dvh-2rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
             <div className="shrink-0 border-b border-border px-5 py-4">
               <DialogTitle className="font-display text-xl">Size Chart</DialogTitle>
               <DialogDescription className="sr-only">

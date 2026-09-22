@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/AdminShell";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 import { getAdminSession } from "@/lib/admin-auth.server";
 import { listCustomersAdmin } from "@/lib/commerce.server";
 import { formatInr } from "@/lib/price";
@@ -15,11 +16,14 @@ export default async function AdminCustomersPage() {
 
   return (
     <AdminShell username={session.username}>
-      <div>
-        <h1 className="font-display text-3xl font-bold">Customers</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {customers.length} registered customers
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-bold">Customers</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {customers.length} registered customers
+          </p>
+        </div>
+        <ExportCsvButton type="customers" label="Export CSV" />
       </div>
 
       <div className="mt-8 overflow-x-auto rounded-2xl border border-border bg-white">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdminShell } from "@/components/admin/AdminShell";
+import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 import { getAdminSession } from "@/lib/admin-auth.server";
 import { listAllOrders } from "@/lib/commerce.server";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/commerce-constants";
@@ -16,11 +17,12 @@ export default async function AdminOrdersPage() {
 
   return (
     <AdminShell username={session.username}>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold">Orders</h1>
           <p className="mt-1 text-sm text-muted-foreground">{orders.length} total orders</p>
         </div>
+        <ExportCsvButton type="orders" label="Export CSV" />
       </div>
 
       <div className="mt-8 overflow-x-auto rounded-2xl border border-border bg-white">

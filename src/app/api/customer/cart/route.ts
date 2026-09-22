@@ -6,8 +6,10 @@ import {
   mergeGuestCart,
   removeCartItem,
   setCartItemQuantity,
+  setCartItemVariant,
   upsertCartItem,
 } from "@/lib/commerce.server";
+import { CART_MAX_QUANTITY } from "@/lib/commerce-constants";
 import { cartItemInputSchema } from "@/lib/commerce-types";
 import { getCustomerSession } from "@/lib/customer-auth.server";
 
@@ -34,7 +36,10 @@ export async function POST(request: Request) {
 
     if (body["action"] === "setQuantity") {
       const parsed = z
-        .object({ itemId: z.string().min(1), quantity: z.number().int().min(0).max(20) })
+        .object({
+          itemId: z.string().min(1),
+          quantity: z.number().int().min(0).max(CART_MAX_QUANTITY),
+        })
         .parse(body);
       const items = await setCartItemQuantity(session.id, parsed.itemId, parsed.quantity);
       return NextResponse.json({ items });
@@ -43,6 +48,18 @@ export async function POST(request: Request) {
     if (body["action"] === "remove") {
       const parsed = z.object({ itemId: z.string().min(1) }).parse(body);
       const items = await removeCartItem(session.id, parsed.itemId);
+      return NextResponse.json({ items });
+    }
+
+    if (body["action"] === "setVariant") {
+      const parsed = z
+        .object({
+          itemId: z.string().min(1),
+          size: z.string().trim().min(1).max(10),
+          color: z.string().trim().min(1).max(40),
+        })
+        .parse(body);
+      const items = await setCartItemVariant(session.id, parsed.itemId, parsed.size, parsed.color);
       return NextResponse.json({ items });
     }
 

@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 
 import { requireAdminSession } from "@/lib/admin-auth.server";
 import { getProducts, saveProduct } from "@/lib/catalog.server";
-import { productSchema } from "@/lib/catalog-types";
+import { asProduct, productSchema } from "@/lib/catalog-types";
 
 export async function GET() {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   try {
     await requireAdminSession();
     const body: unknown = await request.json();
-    const product = productSchema.parse(body);
+    const product = asProduct(productSchema.parse(body));
     const saved = await saveProduct(product, "create");
     return NextResponse.json({ product: saved }, { status: 201 });
   } catch (error) {

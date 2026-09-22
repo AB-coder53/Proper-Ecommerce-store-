@@ -61,6 +61,16 @@ export default async function AdminDashboardPage() {
           </Link>
         </div>
         <div className="rounded-3xl border border-border bg-white p-6">
+          <p className="text-sm text-muted-foreground">Bundles & shipping</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Configure product-page bundle offers and delivery estimates.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold text-teal">
+            <Link href="/admin/bundles">Manage bundles →</Link>
+            <Link href="/admin/shipping">Shipping settings →</Link>
+          </div>
+        </div>
+        <div className="rounded-3xl border border-border bg-white p-6">
           <p className="text-sm text-muted-foreground">Collections</p>
           <p className="mt-2 font-display text-4xl font-bold">{catalog.collections.length}</p>
           <Link

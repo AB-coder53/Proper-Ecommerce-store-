@@ -36,6 +36,7 @@ export function AuthModal({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError("");
     try {
@@ -67,7 +68,7 @@ export function AuthModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-3xl border-border p-0 sm:max-w-md">
+      <DialogContent className="w-[min(100%,calc(100vw-1.5rem))] max-w-md rounded-3xl border-border p-0 sm:max-w-md">
         <div className="px-6 pt-6 pb-2">
           <DialogHeader>
             <DialogTitle className="font-display text-3xl">

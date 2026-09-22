@@ -34,3 +34,5 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
 };
 
 export const SHIPPING_COST_INR = 0;
+export const CART_MAX_QUANTITY = 20;
+export const TRACKING_COOKIE_NAME = "ab_order_track";

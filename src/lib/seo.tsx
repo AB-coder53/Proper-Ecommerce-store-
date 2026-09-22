@@ -85,11 +85,6 @@ export function websiteJsonLd() {
     url: SITE_URL,
     description: `${SITE_TAGLINE}. Heavyweight cotton tees launching soon.`,
     publisher: { "@type": "Organization", name: SITE_NAME },
-    potentialAction: {
-      "@type": "SearchAction",
-      target: `${SITE_URL}/collection?q={search_term_string}`,
-      "query-input": "required name=search_term_string",
-    },
   };
 }
 
@@ -106,7 +101,10 @@ export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
   };
 }
 
-export function productJsonLd(product: Product) {
+export function productJsonLd(
+  product: Product,
+  reviewSummary?: { average: number; count: number },
+) {
   const price = parsePriceInr(product.price);
   return {
     "@context": "https://schema.org",
@@ -127,6 +125,17 @@ export function productJsonLd(product: Product) {
       availability: "https://schema.org/PreOrder",
       itemCondition: "https://schema.org/NewCondition",
     },
+    ...(reviewSummary && reviewSummary.count > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: reviewSummary.average,
+            reviewCount: reviewSummary.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+        }
+      : {}),
   };
 }
 

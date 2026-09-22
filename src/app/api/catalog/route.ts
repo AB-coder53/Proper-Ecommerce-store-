@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { getAdminSession } from "@/lib/admin-auth.server";
-import { getCatalog } from "@/lib/catalog.server";
+import { getCatalog, invalidateCatalogCache } from "@/lib/catalog.server";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const live = new URL(request.url).searchParams.has("live");
+  if (live) invalidateCatalogCache();
   const catalog = await getCatalog();
   return NextResponse.json(catalog, {
-    headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" },
+    headers: {
+      "Cache-Control": live ? "no-store" : "public, s-maxage=30, stale-while-revalidate=120",
+    },
   });
 }
 
