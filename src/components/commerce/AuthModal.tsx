@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import type { CartItemInput, CustomerPublic } from "@/lib/commerce-types";
 
 export function AuthModal({
@@ -52,9 +53,9 @@ export function AuthModal({
           guestCart,
         }),
       });
-      const data = (await res.json()) as { customer?: CustomerPublic; error?: string };
+      const data = await readJsonBody<{ customer?: CustomerPublic; error?: string }>(res);
       if (!res.ok || !data.customer) {
-        setError(data.error || "Authentication failed.");
+        setError(apiErrorMessage(data, "Authentication failed."));
         return;
       }
       await onSuccess(data.customer);
@@ -82,7 +83,7 @@ export function AuthModal({
           </DialogHeader>
         </div>
 
-        <form onSubmit={submit} className="space-y-4 px-6 pb-6">
+        <form onSubmit={submit} aria-busy={loading} className="space-y-4 px-6 pb-6">
           {mode === "signup" ? (
             <>
               <div>
@@ -134,7 +135,11 @@ export function AuthModal({
             />
           </div>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
 
           <Button
             type="submit"

@@ -7,6 +7,7 @@ import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { StarRating } from "@/components/site/StarRating";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import type { PublicReview, ReviewEligibility, ReviewSummary } from "@/lib/reviews";
 import { REVIEW_MAX_LENGTH, REVIEW_MIN_LENGTH } from "@/lib/reviews";
 
@@ -78,8 +79,8 @@ export function ProductReviews({
           ...(eligibility?.orderId ? { orderId: eligibility.orderId } : {}),
         }),
       });
-      const payload = (await res.json()) as { error?: string; message?: string };
-      if (!res.ok) throw new Error(payload.error || "Could not submit review.");
+      const payload = await readJsonBody<{ error?: string; message?: string }>(res);
+      if (!res.ok) throw new Error(apiErrorMessage(payload, "Could not submit review."));
       setBody("");
       setRating(5);
       setMessage(payload.message || "Thanks. Your review is pending approval.");
@@ -140,7 +141,7 @@ export function ProductReviews({
         ) : !eligibility.canReview ? (
           <p className="mt-3 text-sm text-muted-foreground">{eligibility.reason}</p>
         ) : (
-          <form onSubmit={submit} className="mt-4 space-y-4">
+          <form onSubmit={submit} aria-busy={submitting} className="mt-4 space-y-4">
             <div>
               <p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                 Rating
@@ -156,8 +157,16 @@ export function ProductReviews({
               placeholder="Share fit, fabric, and delivery details."
               className="min-h-28 rounded-2xl"
             />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            {message ? <p className="text-sm text-teal">{message}</p> : null}
+            {error ? (
+              <p className="text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {message ? (
+              <p className="text-sm text-teal" role="status">
+                {message}
+              </p>
+            ) : null}
             <Button
               type="submit"
               disabled={submitting}

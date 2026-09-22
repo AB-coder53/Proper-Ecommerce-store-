@@ -1,36 +1,46 @@
 "use client";
 
 import Link from "next/link";
-import { Instagram, Mail } from "lucide-react";
+import { Instagram, Loader2, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FormAlert } from "@/components/site/FormAlert";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import { LEGAL_NAV_LINKS } from "@/lib/legal/content";
 import { NAV_LINKS, SITE_EMAIL, SITE_INSTAGRAM } from "@/lib/site";
 
 export function SiteFooter() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (loading) return;
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/early-access", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      const payload = await readJsonBody<{ error?: string }>(res);
       if (!res.ok) {
-        toast.error("Could not subscribe. Please try again.");
+        const nextError = apiErrorMessage(payload, "Could not subscribe. Please try again.");
+        setError(nextError);
+        toast.error(nextError);
         return;
       }
       toast.success("You're on the list.");
       setEmail("");
     } catch {
-      toast.error("Could not subscribe. Please try again.");
+      const nextError = "Could not subscribe. Please try again.";
+      setError(nextError);
+      toast.error(nextError);
     } finally {
       setLoading(false);
     }
@@ -48,6 +58,7 @@ export function SiteFooter() {
 
         <form
           onSubmit={handleSubmit}
+          aria-busy={loading}
           className="mx-auto mt-8 flex max-w-lg flex-col gap-3 sm:flex-row"
         >
           <label htmlFor="footer-email" className="sr-only">
@@ -67,9 +78,19 @@ export function SiteFooter() {
             disabled={loading}
             className="h-12 w-full rounded-full bg-teal px-8 text-xs font-semibold tracking-[0.12em] text-teal-foreground uppercase hover:bg-teal/90 sm:w-auto"
           >
-            Subscribe
+            {loading ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Subscribing…
+              </>
+            ) : (
+              "Subscribe"
+            )}
           </Button>
         </form>
+        <div className="mx-auto mt-3 max-w-lg">
+          <FormAlert error={error} />
+        </div>
 
         <nav
           className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm text-muted-foreground"

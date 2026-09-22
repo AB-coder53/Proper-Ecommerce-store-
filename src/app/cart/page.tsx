@@ -6,6 +6,7 @@ import { useEffect, useMemo } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { ColorSwatchRow } from "@/components/site/ColorSwatchRow";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,15 @@ import { CART_MAX_QUANTITY } from "@/lib/commerce-constants";
 
 export default function CartPage() {
   const router = useRouter();
-  const { customer, cart, guestCart, openAuth, updateCartQuantity, removeFromCart } = useCommerce();
+  const {
+    customer,
+    cart,
+    guestCart,
+    openAuth,
+    updateCartQuantity,
+    updateCartVariant,
+    removeFromCart,
+  } = useCommerce();
   const { products, refresh } = useCatalog();
   const { hasOffer, promoCode, discountInr } = useIstefadaOffer();
 
@@ -100,9 +109,18 @@ export default function CartPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h2 className="font-semibold">{line.name}</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {line.color} · Size {line.size}
-                        </p>
+                        <ColorSwatchRow
+                          colors={line.product?.colors ?? [line.color]}
+                          selected={line.color}
+                          label={`Colour for ${line.name}`}
+                          onSelect={
+                            (line.product?.colors?.length ?? 0) > 1
+                              ? (color) => void updateCartVariant(line.key, line.size, color)
+                              : undefined
+                          }
+                          className="mt-1.5 -ml-1"
+                        />
+                        <p className="mt-1 text-sm text-muted-foreground">Size {line.size}</p>
                         <p className="mt-2 text-sm font-semibold text-teal">
                           {hasOffer ? (
                             <span className="flex flex-col">

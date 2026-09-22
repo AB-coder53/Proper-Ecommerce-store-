@@ -8,6 +8,8 @@ const COLOR_SWATCH: Record<string, string> = {
   "coffee brown": "bg-[#6b4c3b]",
   grey: "bg-neutral-400",
   gray: "bg-neutral-400",
+  "light grey": "bg-neutral-300",
+  "light gray": "bg-neutral-300",
   "olive green": "bg-[#556b2f]",
   green: "bg-[#4a7c59]",
 };

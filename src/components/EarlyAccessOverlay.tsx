@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import type { EarlyAccessResult } from "@/lib/api-types";
 import { isEarlyAccessUnlocked, saveEarlyAccess, trackEvent } from "@/lib/early-access";
 
@@ -87,11 +88,9 @@ export function EarlyAccessOverlay({ forceOpen = false, onClose, onEmailCaptured
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
-      const payload = (await response.json()) as EarlyAccessResult | { error?: string };
+      const payload = await readJsonBody<EarlyAccessResult | { error?: string }>(response);
       if (!response.ok || !("status" in payload)) {
-        throw new Error(
-          "error" in payload ? (payload.error ?? "Request failed") : "Request failed",
-        );
+        throw new Error(apiErrorMessage(payload, "We couldn't save your email right now."));
       }
       saveEarlyAccess(payload.email);
       onEmailCaptured?.(payload.email);
@@ -100,8 +99,12 @@ export function EarlyAccessOverlay({ forceOpen = false, onClose, onEmailCaptured
       );
       setSuccess(true);
       window.setTimeout(close, 1400);
-    } catch {
-      setError("We couldn't save your email right now. Please try again.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "We couldn't save your email right now. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -149,7 +152,12 @@ export function EarlyAccessOverlay({ forceOpen = false, onClose, onEmailCaptured
                 exclusive 10% launch discount.
               </p>
 
-              <form onSubmit={handleSubmit} className="mt-7 text-left" noValidate>
+              <form
+                onSubmit={handleSubmit}
+                className="mt-7 text-left"
+                noValidate
+                aria-busy={loading}
+              >
                 <Label htmlFor="early-access-email" className="eyebrow">
                   Email address
                 </Label>

@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { CatalogPrice } from "@/components/site/CatalogPrice";
+import { ColorSwatchRow } from "@/components/site/ColorSwatchRow";
 import { ProductBadgeList } from "@/components/site/ProductBadgeList";
 import { ProductImage } from "@/components/site/ProductImage";
 import { VariantSelectDialog } from "@/components/site/VariantSelectDialog";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
 import { addToCartLabel, useAddToCart } from "@/hooks/use-add-to-cart";
+import { productImageForColor } from "@/lib/cart-display";
 import type { Product } from "@/lib/catalog-types";
 import { resolveDirectCartVariant } from "@/lib/product-variants";
 import { productHasPurchasableStock, variantHasStock } from "@/lib/inventory";
@@ -21,6 +23,11 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
   const directInStock = direct ? variantHasStock(product, direct.color, direct.size) : true;
   const { status, error, run, isBusy } = useAddToCart();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewColor, setPreviewColor] = useState(product.colors[0] ?? "");
+  const previewImage = useMemo(
+    () => (previewColor ? productImageForColor(product, previewColor) : product.image),
+    [previewColor, product],
+  );
 
   const onAdd = () => {
     if (isBusy || soldOut) return;
@@ -43,8 +50,8 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
           className="absolute top-3 right-3 z-10 max-w-[75%] justify-end"
         />
         <ProductImage
-          src={product.image}
-          alt={`${product.name} — ${product.fabric}`}
+          src={previewImage}
+          alt={`${product.name} — ${previewColor || product.fabric}`}
           width={800}
           height={1000}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -52,7 +59,15 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
         />
       </Link>
 
-      <div className="mt-4 flex min-w-0 flex-1 flex-col">
+      <ColorSwatchRow
+        colors={product.colors}
+        selected={previewColor}
+        onSelect={setPreviewColor}
+        label={`${product.name} colours`}
+        className="mt-3"
+      />
+
+      <div className="mt-3 flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <h3 className="min-w-0 break-words text-base font-bold leading-snug sm:text-lg">
             <Link href={`/collection/${product.id}`} className="hover:text-teal">
@@ -86,7 +101,12 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
       </div>
 
       {!direct ? (
-        <VariantSelectDialog product={product} open={pickerOpen} onOpenChange={setPickerOpen} />
+        <VariantSelectDialog
+          product={product}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          initialColor={previewColor}
+        />
       ) : null}
     </article>
   );

@@ -1,21 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
 import { Button } from "@/components/ui/button";
 
 function SuccessInner() {
   const params = useSearchParams();
   const orderNumber = params.get("order") || "";
   const { closeCart } = useCommerce();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     closeCart();
+    const timer = window.setTimeout(() => setReady(true), 1100);
+    return () => window.clearTimeout(timer);
   }, [closeCart]);
+
+  if (!ready) {
+    return (
+      <OrderProcessingScreen
+        title="Confirming your order"
+        subtitle="Just a moment while we finish placing it."
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-lg px-5 py-20 text-center sm:px-8">
@@ -65,7 +78,14 @@ function SuccessInner() {
 
 export default function CheckoutSuccessPage() {
   return (
-    <Suspense fallback={<div className="min-h-[40vh]" />}>
+    <Suspense
+      fallback={
+        <OrderProcessingScreen
+          title="Confirming your order"
+          subtitle="Just a moment while we finish placing it."
+        />
+      }
+    >
       <SuccessInner />
     </Suspense>
   );

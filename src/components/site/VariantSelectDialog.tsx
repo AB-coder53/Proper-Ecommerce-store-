@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ProductVariantPicker } from "@/components/site/ProductVariantPicker";
 import { ProductImage } from "@/components/site/ProductImage";
@@ -18,18 +18,26 @@ export function VariantSelectDialog({
   product,
   open,
   onOpenChange,
+  initialColor = "",
 }: {
   product: Product;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialColor?: string;
 }) {
   const images = product.images?.length ? product.images : [product.image];
   const options = productVariantOptions(product);
   const { hasOffer } = useIstefadaOffer();
   const priced = getDiscountedPriceLabel(product.price);
   const { status, error, run, isBusy } = useAddToCart();
-  const [color, setColor] = useState("");
+  const [color, setColor] = useState(initialColor);
   const [size, setSize] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setColor(initialColor || "");
+    setSize("");
+  }, [open, initialColor]);
 
   const preview = useMemo(() => {
     if (!color) return product.image;
@@ -52,16 +60,7 @@ export function VariantSelectDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setColor("");
-          setSize("");
-        }
-        onOpenChange(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(90vh,calc(100dvh-2rem))] w-[min(100%,calc(100vw-1.5rem))] max-w-md flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl">
         <div className="shrink-0 border-b border-border px-5 py-4 pr-12">
           <DialogTitle className="font-display text-xl">Select options</DialogTitle>

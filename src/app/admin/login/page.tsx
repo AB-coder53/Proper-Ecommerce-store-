@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -27,8 +28,8 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Login failed");
+      const data = await readJsonBody<{ error?: string }>(res);
+      if (!res.ok) throw new Error(apiErrorMessage(data, "Login failed"));
       router.replace(next.startsWith("/admin") ? next : "/admin");
       router.refresh();
     } catch (err) {
@@ -89,7 +90,11 @@ function LoginForm() {
           </div>
         </div>
 
-        {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <p className="mt-4 text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
 
         <Button
           type="submit"

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { OrderProcessingOverlay } from "@/components/commerce/OrderProcessingScreen";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ import type { CartItemInput, CartLine, CustomerAddress, Order } from "@/lib/comm
 import type { Product } from "@/lib/catalog-types";
 import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 
 export default function CheckoutClient() {
   const router = useRouter();
@@ -126,6 +128,7 @@ export default function CheckoutClient() {
   const total = Math.max(0, subtotal - previewDiscount);
 
   const applyCoupon = async () => {
+    if (couponBusy) return;
     setCouponBusy(true);
     try {
       const res = await fetch("/api/coupons/validate", {
@@ -140,12 +143,21 @@ export default function CheckoutClient() {
           })),
         }),
       });
-      const data = (await res.json()) as {
+      const data = await readJsonBody<{
         ok: boolean;
         code: string;
         discount: number;
         error?: string;
-      };
+      }>(res);
+      if (!res.ok) {
+        setCouponQuote({
+          ok: false,
+          code: couponInput,
+          discount: 0,
+          error: apiErrorMessage(data, "Could not validate coupon."),
+        });
+        return;
+      }
       setCouponQuote(data);
     } catch {
       setCouponQuote({
@@ -224,6 +236,7 @@ export default function CheckoutClient() {
     setSubmitting(true);
     setError("");
     setIssues([]);
+    let placed = false;
     try {
       const { foundIssues } = await collectFreshLines();
       if (foundIssues.length) {
@@ -273,22 +286,25 @@ export default function CheckoutClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json()) as { order?: Order; error?: string };
+      const data = await readJsonBody<{ order?: Order; error?: string }>(res);
       if (!res.ok || !data.order) {
         if (res.status === 409 && typeof crypto !== "undefined" && "randomUUID" in crypto) {
           checkoutIdRef.current = crypto.randomUUID();
         }
-        setError(data.error || "Could not place order. Your cart is unchanged.");
+        setError(apiErrorMessage(data, "Could not place order. Your cart is unchanged."));
         return;
       }
+      placed = true;
       sessionStorage.removeItem(BUY_NOW_KEY);
       await applySuccessfulOrder(data.order, mode);
       router.push(`/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}`);
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
+      if (!placed) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   };
 
@@ -339,6 +355,7 @@ export default function CheckoutClient() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+      {submitting ? <OrderProcessingOverlay /> : null}
       <h1 className="font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">Checkout</h1>
       <p className="mt-3 text-sm text-muted-foreground">
         Confirm your details and delivery address to place the order.
@@ -346,6 +363,7 @@ export default function CheckoutClient() {
 
       <form
         onSubmit={submit}
+        aria-busy={submitting}
         className="mt-10 grid min-w-0 gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"
       >
         <div className="min-w-0 space-y-8">

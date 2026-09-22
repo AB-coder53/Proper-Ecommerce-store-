@@ -1,13 +1,16 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import { FormAlert } from "@/components/site/FormAlert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CustomerAddress, CustomerPublic } from "@/lib/commerce-types";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 
 export default function AccountSettingsPage() {
   const { customer, loading, openAuth, refreshSession } = useCommerce();
@@ -21,6 +24,9 @@ export default function AccountSettingsPage() {
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [addressError, setAddressError] = useState("");
 
   useEffect(() => {
     if (!loading && !customer) openAuth({ type: "generic", redirect: "/account/settings" });
@@ -41,20 +47,28 @@ export default function AccountSettingsPage() {
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving) return;
     setSaving(true);
+    setProfileError("");
     try {
       const res = await fetch("/api/customer/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fullName, phone, alternatePhone }),
       });
-      const data = (await res.json()) as { customer?: CustomerPublic; error?: string };
+      const data = await readJsonBody<{ customer?: CustomerPublic; error?: string }>(res);
       if (!res.ok) {
-        toast.error(data.error || "Could not save profile");
+        const nextError = apiErrorMessage(data, "Could not save profile");
+        setProfileError(nextError);
+        toast.error(nextError);
         return;
       }
       await refreshSession();
       toast.success("Profile updated");
+    } catch {
+      const nextError = "Could not save profile. Please try again.";
+      setProfileError(nextError);
+      toast.error(nextError);
     } finally {
       setSaving(false);
     }
@@ -62,33 +76,46 @@ export default function AccountSettingsPage() {
 
   const saveAddress = async (event: FormEvent) => {
     event.preventDefault();
-    const res = await fetch("/api/customer/addresses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        label: "Home",
-        line1,
-        line2,
-        city,
-        state,
-        pincode,
-        isDefault: true,
-      }),
-    });
-    const data = (await res.json()) as { address?: CustomerAddress; error?: string };
-    if (!res.ok) {
-      toast.error(data.error || "Could not save address");
-      return;
+    if (savingAddress) return;
+    setSavingAddress(true);
+    setAddressError("");
+    try {
+      const res = await fetch("/api/customer/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: "Home",
+          line1,
+          line2,
+          city,
+          state,
+          pincode,
+          isDefault: true,
+        }),
+      });
+      const data = await readJsonBody<{ address?: CustomerAddress; error?: string }>(res);
+      if (!res.ok) {
+        const nextError = apiErrorMessage(data, "Could not save address");
+        setAddressError(nextError);
+        toast.error(nextError);
+        return;
+      }
+      toast.success("Address saved");
+      setLine1("");
+      setLine2("");
+      setCity("");
+      setState("");
+      setPincode("");
+      const list = await fetch("/api/customer/addresses");
+      const listData = await readJsonBody<{ addresses?: CustomerAddress[] }>(list);
+      setAddresses(listData.addresses ?? []);
+    } catch {
+      const nextError = "Could not save address. Please try again.";
+      setAddressError(nextError);
+      toast.error(nextError);
+    } finally {
+      setSavingAddress(false);
     }
-    toast.success("Address saved");
-    setLine1("");
-    setLine2("");
-    setCity("");
-    setState("");
-    setPincode("");
-    const list = await fetch("/api/customer/addresses");
-    const listData = (await list.json()) as { addresses: CustomerAddress[] };
-    setAddresses(listData.addresses);
   };
 
   if (!customer) return <div className="min-h-[40vh]" />;
@@ -100,7 +127,11 @@ export default function AccountSettingsPage() {
         Account settings
       </h1>
 
-      <form onSubmit={saveProfile} className="mt-8 space-y-4 rounded-3xl border border-border p-6">
+      <form
+        onSubmit={saveProfile}
+        aria-busy={saving}
+        className="mt-8 space-y-4 rounded-3xl border border-border p-6"
+      >
         <h2 className="font-display text-2xl font-bold">Profile</h2>
         <div>
           <Label htmlFor="fullName">Full name</Label>
@@ -135,12 +166,20 @@ export default function AccountSettingsPage() {
             className="mt-1.5 h-11 rounded-full"
           />
         </div>
+        <FormAlert error={profileError} />
         <Button
           type="submit"
           disabled={saving}
           className="h-11 rounded-full bg-teal px-8 text-xs tracking-[0.12em] text-teal-foreground uppercase"
         >
-          Save profile
+          {saving ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            "Save profile"
+          )}
         </Button>
       </form>
 
@@ -163,7 +202,11 @@ export default function AccountSettingsPage() {
           ))}
         </div>
 
-        <form onSubmit={saveAddress} className="mt-6 grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={saveAddress}
+          aria-busy={savingAddress}
+          className="mt-6 grid gap-3 sm:grid-cols-2"
+        >
           <div className="sm:col-span-2">
             <Label htmlFor="a1">New address line 1</Label>
             <Input
@@ -213,12 +256,23 @@ export default function AccountSettingsPage() {
               className="mt-1.5 h-11 rounded-full"
             />
           </div>
+          <div className="sm:col-span-2">
+            <FormAlert error={addressError} />
+          </div>
           <div className="flex items-end">
             <Button
               type="submit"
+              disabled={savingAddress}
               className="h-11 w-full rounded-full bg-ink text-xs tracking-[0.12em] text-ink-foreground uppercase"
             >
-              Save address
+              {savingAddress ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save address"
+              )}
             </Button>
           </div>
         </form>

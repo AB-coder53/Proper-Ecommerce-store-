@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/data/products";
 import type { ReservationResult } from "@/lib/api-types";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import { makeReservationId } from "@/lib/reservation-utils";
 import { readEarlyAccessEmail } from "@/lib/early-access";
 import { useCatalog } from "@/components/site/CatalogProvider";
@@ -197,11 +198,9 @@ export function RegisterDialog({ open, onOpenChange, product }: Props) {
           items,
         }),
       });
-      const payload = (await response.json()) as ReservationResult | { error?: string };
+      const payload = await readJsonBody<ReservationResult | { error?: string }>(response);
       if (!response.ok || !("status" in payload)) {
-        throw new Error(
-          "status" in payload ? "Reservation failed" : (payload.error ?? "Reservation failed"),
-        );
+        throw new Error(apiErrorMessage(payload, "Reservation failed. Please try again."));
       }
       try {
         window.localStorage.removeItem(STORAGE_KEY);
@@ -213,9 +212,11 @@ export function RegisterDialog({ open, onOpenChange, product }: Props) {
       } else {
         setDone({ reservationId: payload.reservationId });
       }
-    } catch {
+    } catch (error) {
       setFormError(
-        "We couldn't complete your reservation right now. Please try again in a moment.",
+        error instanceof Error
+          ? error.message
+          : "We couldn't complete your reservation right now. Please try again in a moment.",
       );
     } finally {
       setLoading(false);
@@ -601,7 +602,11 @@ export function RegisterDialog({ open, onOpenChange, product }: Props) {
                     </div>
                   </div>
 
-                  {formError ? <p className="mt-4 text-sm text-destructive">{formError}</p> : null}
+                  {formError ? (
+                    <p className="mt-4 text-sm text-destructive" role="alert">
+                      {formError}
+                    </p>
+                  ) : null}
                 </StepShell>
               ) : null}
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Instagram, Mail } from "lucide-react";
+import { Instagram, Loader2, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FormAlert } from "@/components/site/FormAlert";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import { SITE_EMAIL, SITE_INSTAGRAM } from "@/lib/site";
 
 export function ContactContent() {
@@ -17,19 +19,27 @@ export function ContactContent() {
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (loading) return;
     setLoading(true);
+    setError("");
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, phone, message }),
       });
-      const payload = (await res.json().catch(() => ({}))) as { error?: string };
+      const payload = await readJsonBody<{ error?: string }>(res);
       if (!res.ok) {
-        toast.error(payload.error || "Could not send your message. Please try again.");
+        const nextError = apiErrorMessage(
+          payload,
+          "Could not send your message. Please try again.",
+        );
+        setError(nextError);
+        toast.error(nextError);
         return;
       }
       toast.success("Message sent. We'll get back to you shortly.");
@@ -38,7 +48,9 @@ export function ContactContent() {
       setPhone("");
       setMessage("");
     } catch {
-      toast.error("Could not send your message. Please try again.");
+      const nextError = "Could not send your message. Please try again.";
+      setError(nextError);
+      toast.error(nextError);
     } finally {
       setLoading(false);
     }
@@ -59,6 +71,8 @@ export function ContactContent() {
 
       <form
         onSubmit={handleSubmit}
+        aria-busy={loading}
+        noValidate
         className="mx-auto mt-14 max-w-2xl space-y-6 rounded-3xl border border-gold/25 bg-cream p-7 text-left sm:p-10"
       >
         <div className="grid gap-6 sm:grid-cols-2">
@@ -119,12 +133,20 @@ export function ContactContent() {
             className="mt-2 min-h-36 rounded-3xl border-gold/20 bg-ivory px-5 py-3"
           />
         </div>
+        <FormAlert error={error} />
         <Button
           type="submit"
           disabled={loading}
           className="h-12 w-full rounded-full bg-gold px-8 text-xs font-semibold tracking-[0.16em] text-foreground uppercase hover:bg-gold/90 sm:w-auto"
         >
-          {loading ? "Sending…" : "Send message"}
+          {loading ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Sending…
+            </>
+          ) : (
+            "Send message"
+          )}
         </Button>
       </form>
 

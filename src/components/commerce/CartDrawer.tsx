@@ -6,6 +6,7 @@ import { Loader2, Minus, Plus, Trash2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
+import { ColorSwatchRow } from "@/components/site/ColorSwatchRow";
 import { ProductImage } from "@/components/site/ProductImage";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
@@ -265,25 +266,21 @@ function CartDrawerItem({
         </div>
 
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {colors.length > 1 ? (
-            <label className="min-w-0 text-xs text-muted-foreground">
-              Colour
-              <select
-                value={line.color}
-                disabled={busy}
-                aria-label={`Colour for ${line.name}`}
-                onChange={(event) =>
-                  void run(() => onVariant(line.key, line.size, event.target.value))
+          {colors.length ? (
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Colour</p>
+              <ColorSwatchRow
+                colors={colors}
+                selected={line.color}
+                disabled={busy || colors.length < 2}
+                label={`Colour for ${line.name}`}
+                onSelect={
+                  colors.length > 1
+                    ? (color) => void run(() => onVariant(line.key, line.size, color))
+                    : undefined
                 }
-                className="mt-1 h-11 w-full min-w-0 rounded-full border border-border bg-background px-3 text-sm text-foreground"
-              >
-                {colors.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
           ) : (
             <p className="text-xs text-muted-foreground">Colour: {line.color}</p>
           )}

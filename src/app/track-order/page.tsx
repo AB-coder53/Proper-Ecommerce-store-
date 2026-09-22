@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLiveGuestTracking, useLiveOrders } from "@/hooks/use-live-orders";
 import { ORDER_STATUS_LABELS } from "@/lib/commerce-constants";
+import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
 import { formatOrderDate, type GuestOrderTracking } from "@/lib/order-tracking";
 
 export default function TrackOrderPage() {
@@ -35,9 +36,9 @@ export default function TrackOrderPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderNumber }),
       });
-      const data = (await res.json()) as { ok?: boolean; error?: string };
+      const data = await readJsonBody<{ ok?: boolean; error?: string }>(res);
       if (!res.ok || !data.ok) {
-        setError(data.error || "Please check your order number and try again.");
+        setError(apiErrorMessage(data, "Please check your order number and try again."));
         return;
       }
       setStep("verify");
@@ -59,9 +60,9 @@ export default function TrackOrderPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderNumber, phoneLast4 }),
       });
-      const data = (await res.json()) as { tracking?: GuestOrderTracking; error?: string };
+      const data = await readJsonBody<{ tracking?: GuestOrderTracking; error?: string }>(res);
       if (!res.ok || !data.tracking) {
-        setError(data.error || "Verification failed. Please try again.");
+        setError(apiErrorMessage(data, "Verification failed. Please try again."));
         return;
       }
       setTracking(data.tracking);
