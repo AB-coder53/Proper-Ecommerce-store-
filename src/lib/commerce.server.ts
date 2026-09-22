@@ -6,7 +6,7 @@ import path from "path";
 
 import type { Product } from "@/lib/catalog-types";
 import { getProductById, getProducts, invalidateCatalogCache } from "@/lib/catalog.server";
-import { CART_MAX_QUANTITY, SHIPPING_COST_INR } from "@/lib/commerce-constants";
+import { CART_MAX_QUANTITY, ORDER_STATUSES, SHIPPING_COST_INR } from "@/lib/commerce-constants";
 import type {
   AddressInput,
   CartItemInput,
@@ -108,8 +108,8 @@ async function withDbOrFile<T>(dbFn: () => Promise<T>, fileFn: () => Promise<T>)
     const err = error as { code?: string; message?: string; status?: number };
     if (err.status === 400 || err.status === 401 || err.status === 404 || err.status === 409)
       throw error;
-    if (useFileStore === false && !isMissingRelation(err)) throw error;
-    // Missing service role / tables â†’ silent JSON fallback (same pattern as catalog)
+    if (useFileStore === false) throw error;
+    // Missing service role / tables → silent JSON fallback (same pattern as catalog)
     if (
       isMissingRelation(err) ||
       /SUPABASE_SERVICE_ROLE_KEY/i.test(err.message ?? "") ||
@@ -127,6 +127,42 @@ function val(row: Record<string, unknown>, ...keys: string[]) {
     if (row[key] !== undefined && row[key] !== null) return row[key];
   }
   return undefined;
+}
+
+function money(value: unknown) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(amount) : 0;
+}
+
+const KNOWN_ORDER_STATUSES = new Set<string>([
+  ...ORDER_STATUSES,
+  "cancelled",
+  "failed",
+  "returned",
+]);
+const KNOWN_PAYMENT_STATUSES = new Set(["pending", "paid", "failed", "refunded"]);
+
+function normalizeToken(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function normalizeOrderStatus(value: unknown, fallback = "placed") {
+  const token = normalizeToken(value);
+  return KNOWN_ORDER_STATUSES.has(token) ? token : fallback;
+}
+
+function normalizePaymentStatus(value: unknown, fallback = "pending") {
+  const token = normalizeToken(value);
+  return KNOWN_PAYMENT_STATUSES.has(token) ? token : fallback;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
 }
 
 function mapCustomerRow(row: Record<string, unknown>): CustomerRecord {
@@ -236,17 +272,17 @@ function mapOrderRow(row: Record<string, unknown>, items: OrderItem[] = []): Ord
     addressCity: String(val(row, "address_city", "addressCity")),
     addressState: String(val(row, "address_state", "addressState")),
     addressPincode: String(val(row, "address_pincode", "addressPincode")),
-    subtotal: Number(val(row, "subtotal")),
-    shippingCost: Number(val(row, "shipping_cost", "shippingCost") ?? 0),
-    discount: Number(val(row, "discount") ?? 0),
-    totalAmount: Number(val(row, "total_amount", "totalAmount")),
-    paymentStatus: String(val(row, "payment_status", "paymentStatus")),
-    orderStatus: String(val(row, "order_status", "orderStatus")),
+    subtotal: money(val(row, "subtotal")),
+    shippingCost: money(val(row, "shipping_cost", "shippingCost")),
+    discount: money(val(row, "discount")),
+    totalAmount: money(val(row, "total_amount", "totalAmount")),
+    paymentStatus: normalizePaymentStatus(val(row, "payment_status", "paymentStatus")),
+    orderStatus: normalizeOrderStatus(val(row, "order_status", "orderStatus")),
     inventoryState:
       (val(row, "inventory_state", "inventoryState") as Order["inventoryState"]) || "none",
     promoCode: (val(row, "promo_code", "promoCode") as string | null) ?? null,
-    couponDiscount: Number(val(row, "coupon_discount", "couponDiscount") ?? 0),
-    bundleDiscount: Number(val(row, "bundle_discount", "bundleDiscount") ?? 0),
+    couponDiscount: money(val(row, "coupon_discount", "couponDiscount")),
+    bundleDiscount: money(val(row, "bundle_discount", "bundleDiscount")),
     invoiceNumber: (val(row, "invoice_number", "invoiceNumber") as string | null) ?? null,
     paymentMethod: (val(row, "payment_method", "paymentMethod") as string | null) ?? "prepaid",
     trackingNumber: (val(row, "tracking_number", "trackingNumber") as string | null) ?? null,
@@ -268,9 +304,9 @@ function mapOrderItemRow(row: Record<string, unknown>): OrderItem & { orderId: s
     productImage: (val(row, "product_image", "productImage") ?? null) as string | null,
     size: String(val(row, "size")),
     color: String(val(row, "color")),
-    quantity: Number(val(row, "quantity")),
-    unitPrice: Number(val(row, "unit_price", "unitPrice")),
-    lineTotal: Number(val(row, "line_total", "lineTotal")),
+    quantity: money(val(row, "quantity")) || Number(val(row, "quantity") ?? 0),
+    unitPrice: money(val(row, "unit_price", "unitPrice")),
+    lineTotal: money(val(row, "line_total", "lineTotal")),
     variantId: (val(row, "variant_id", "variantId") as string | null) ?? null,
     sku: (val(row, "sku") as string | null) ?? null,
   };
@@ -1270,101 +1306,118 @@ async function createPlacedOrder(
   return { ...orderBase, items };
 }
 
+function mergeOrderItems(
+  orders: Omit<Order, "items">[],
+  allItems: (OrderItem & { orderId: string })[],
+): Order[] {
+  const byOrder = new Map<string, OrderItem[]>();
+  for (const item of allItems) {
+    const list = byOrder.get(item.orderId) ?? [];
+    list.push(item);
+    byOrder.set(item.orderId, list);
+  }
+  return orders.map((order) => ({
+    ...order,
+    items: byOrder.get(order.id) ?? [],
+  }));
+}
+
 async function attachItems(orders: Omit<Order, "items">[]): Promise<Order[]> {
   if (!orders.length) return [];
-  const ids = orders.map((o) => o.id);
-  const allItems = await withDbOrFile(
+  const ids = orders.map((order) => order.id);
+  return withDbOrFile(
     async () => {
       const sb = getCommerceDb();
       const { data, error } = await sb.from("order_items").select("*").in("order_id", ids);
       if (error) throw error;
-      return (data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>));
+      return mergeOrderItems(
+        orders,
+        (data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+      );
     },
     async () => {
       const store = await readFileStore();
-      return store.orderItems.filter((i) => ids.includes(i.orderId));
+      return mergeOrderItems(
+        orders,
+        store.orderItems.filter((item) => ids.includes(item.orderId)),
+      );
     },
   );
+}
 
-  return orders.map((order) => ({
-    ...order,
-    items: allItems.filter((i) => i.orderId === order.id),
-  }));
+async function queryOrders(opts?: { customerId?: string; idOrNumber?: string }): Promise<Order[]> {
+  const idOrNumber = opts?.idOrNumber?.trim();
+  return withDbOrFile(
+    async () => {
+      const sb = getCommerceDb();
+      let query = sb.from("orders").select("*").order("created_at", { ascending: false });
+      if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
+      if (idOrNumber) {
+        query = isUuid(idOrNumber)
+          ? query.eq("id", idOrNumber)
+          : query.eq("order_number", idOrNumber.toUpperCase());
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      const orders = (data ?? []).map((row) => mapOrderRow(row as Record<string, unknown>));
+      const ids = orders.map((order) => order.id);
+      if (!ids.length) return orders;
+      const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
+      if (itemsRes.error) {
+        console.error("[orders] could not load order items", itemsRes.error);
+        return orders.map((order) => ({ ...order, items: [] }));
+      }
+      return mergeOrderItems(
+        orders,
+        (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+      );
+    },
+    async () => {
+      const store = await readFileStore();
+      let orders = [...store.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      if (opts?.customerId) {
+        orders = orders.filter((order) => order.customerId === opts.customerId);
+      }
+      if (idOrNumber) {
+        const needle = idOrNumber.toUpperCase();
+        orders = orders.filter(
+          (order) => order.id === idOrNumber || order.orderNumber.toUpperCase() === needle,
+        );
+      }
+      return mergeOrderItems(orders, store.orderItems);
+    },
+  );
 }
 
 export async function listOrdersForCustomer(customerId: string) {
-  const orders = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("orders")
-        .select("*")
-        .eq("customer_id", customerId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((row) => mapOrderRow(row as Record<string, unknown>));
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.orders
-        .filter((o) => o.customerId === customerId)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-  );
-  return attachItems(orders);
+  return queryOrders({ customerId });
 }
 
 export async function getOrderForCustomer(customerId: string, orderIdOrNumber: string) {
-  const orders = await listOrdersForCustomer(customerId);
-  return orders.find((o) => o.id === orderIdOrNumber || o.orderNumber === orderIdOrNumber) ?? null;
+  const orders = await queryOrders({ customerId, idOrNumber: orderIdOrNumber });
+  return (
+    orders.find(
+      (order) =>
+        order.id === orderIdOrNumber ||
+        order.orderNumber.toUpperCase() === orderIdOrNumber.trim().toUpperCase(),
+    ) ??
+    orders[0] ??
+    null
+  );
 }
 
 export async function findOrderByNumber(orderNumber: string) {
-  const normalizedNumber = orderNumber.trim().toUpperCase();
-  const order = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("orders")
-        .select("*")
-        .eq("order_number", normalizedNumber)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      return mapOrderRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.orders.find((o) => o.orderNumber.toUpperCase() === normalizedNumber) ?? null;
-    },
-  );
-  if (!order) return null;
-  const [full] = await attachItems([order]);
-  return full ?? null;
+  const orders = await queryOrders({ idOrNumber: orderNumber.trim().toUpperCase() });
+  return orders[0] ?? null;
 }
 
 export async function listAllOrders() {
-  const orders = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((row) => mapOrderRow(row as Record<string, unknown>));
-    },
-    async () => {
-      const store = await readFileStore();
-      return [...store.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-  );
-  return attachItems(orders);
+  return queryOrders();
 }
 
 export async function getOrderById(orderId: string) {
-  const orders = await listAllOrders();
-  return orders.find((o) => o.id === orderId || o.orderNumber === orderId) ?? null;
+  const orders = await queryOrders({ idOrNumber: orderId });
+  return orders[0] ?? null;
 }
 
 export async function ensureInvoiceNumber(orderId: string) {
@@ -1409,7 +1462,11 @@ export async function updateOrderStatus(
   const existing = await getOrderById(orderId);
   if (!existing) throw Object.assign(new Error("Order not found."), { status: 404 });
   const now = new Date().toISOString();
-  const paymentStatus = extras?.paymentStatus?.trim() || existing.paymentStatus;
+  const nextStatus = normalizeOrderStatus(orderStatus, existing.orderStatus);
+  const paymentStatus = normalizePaymentStatus(
+    extras?.paymentStatus?.trim() || existing.paymentStatus,
+    existing.paymentStatus,
+  );
   const trackingNumber =
     extras?.trackingNumber === undefined
       ? (existing.trackingNumber ?? null)
@@ -1421,7 +1478,7 @@ export async function updateOrderStatus(
       ? (existing.trackingUrl ?? null)
       : extras.trackingUrl.trim() || null;
   let inventoryState = existing.inventoryState ?? "none";
-  if (RELEASE_ORDER_STATUSES.has(orderStatus) && inventoryState === "deducted") {
+  if (RELEASE_ORDER_STATUSES.has(nextStatus) && inventoryState === "deducted") {
     await restoreOrderInventory(
       existing.id,
       existing.orderNumber,
@@ -1431,18 +1488,18 @@ export async function updateOrderStatus(
         size: item.size,
         quantity: item.quantity,
       })),
-      orderStatus === "returned" || paymentStatus === "refunded"
+      nextStatus === "returned" || paymentStatus === "refunded"
         ? "ORDER_REFUNDED"
         : "ORDER_CANCELLED",
     );
     inventoryState = "restored";
     invalidateCatalogCache();
   }
-  await withDbOrFile(
+  return withDbOrFile(
     async () => {
       const sb = getCommerceDb();
       const payload: Record<string, unknown> = {
-        order_status: orderStatus,
+        order_status: nextStatus,
         payment_status: paymentStatus,
         inventory_state: inventoryState,
         tracking_number: trackingNumber,
@@ -1450,21 +1507,44 @@ export async function updateOrderStatus(
         tracking_url: trackingUrl,
         updated_at: now,
       };
-      let { error } = await sb.from("orders").update(payload).eq("id", orderId);
+      let { data, error } = await sb
+        .from("orders")
+        .update(payload)
+        .eq("id", existing.id)
+        .select("*")
+        .maybeSingle();
       if (error && /tracking_number|carrier|tracking_url/.test(error.message)) {
         const { tracking_number: _a, carrier: _b, tracking_url: _c, ...rest } = payload;
         void _a;
         void _b;
         void _c;
-        ({ error } = await sb.from("orders").update(rest).eq("id", orderId));
+        ({ data, error } = await sb
+          .from("orders")
+          .update(rest)
+          .eq("id", existing.id)
+          .select("*")
+          .maybeSingle());
       }
       if (error) throw error;
+      if (!data) throw Object.assign(new Error("Order not found."), { status: 404 });
+      const mapped = mapOrderRow(data as Record<string, unknown>);
+      const itemsRes = await sb.from("order_items").select("*").eq("order_id", existing.id);
+      if (itemsRes.error) {
+        console.error("[orders] could not reload order items", itemsRes.error);
+        return { ...mapped, items: existing.items };
+      }
+      return (
+        mergeOrderItems(
+          [mapped],
+          (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+        )[0] ?? { ...mapped, items: existing.items }
+      );
     },
     async () => {
       const store = await readFileStore();
-      const order = store.orders.find((o) => o.id === orderId);
+      const order = store.orders.find((row) => row.id === existing.id);
       if (!order) throw Object.assign(new Error("Order not found."), { status: 404 });
-      order.orderStatus = orderStatus;
+      order.orderStatus = nextStatus;
       order.paymentStatus = paymentStatus;
       order.inventoryState = inventoryState;
       order.trackingNumber = trackingNumber;
@@ -1472,9 +1552,9 @@ export async function updateOrderStatus(
       order.trackingUrl = trackingUrl;
       order.updatedAt = now;
       await writeFileStore(store);
+      return mergeOrderItems([order], store.orderItems)[0] ?? { ...order, items: existing.items };
     },
   );
-  return getOrderById(orderId);
 }
 
 export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {

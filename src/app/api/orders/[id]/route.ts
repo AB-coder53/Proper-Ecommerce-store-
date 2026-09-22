@@ -13,5 +13,5 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const found = await getOrderForCustomer(session.id, id);
   if (!found) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   const [order] = await withExpectedDelivery([found]);
-  return NextResponse.json({ order });
+  return NextResponse.json({ order }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }

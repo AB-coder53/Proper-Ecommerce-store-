@@ -1,41 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams } from "next/navigation";
 
 import { OrderTimeline } from "@/components/commerce/OrderTimeline";
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { ProductImage } from "@/components/site/ProductImage";
 import { Button } from "@/components/ui/button";
+import { useLiveOrder } from "@/hooks/use-live-orders";
 import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/commerce-constants";
-import type { Order } from "@/lib/commerce-types";
 import { formatInr } from "@/lib/price";
 
 export default function AccountOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const { customer, loading, openAuth } = useCommerce();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [error, setError] = useState("");
+  const { order, error } = useLiveOrder(customer ? params.id : undefined);
 
   useEffect(() => {
     if (!loading && !customer) {
       openAuth({ type: "generic", redirect: `/account/orders/${params.id}` });
     }
   }, [customer, loading, openAuth, params.id]);
-
-  useEffect(() => {
-    if (!customer || !params.id) return;
-    void (async () => {
-      const res = await fetch(`/api/orders/${encodeURIComponent(params.id)}`);
-      const data = (await res.json()) as { order?: Order; error?: string };
-      if (!res.ok || !data.order) {
-        setError("Order not found.");
-        return;
-      }
-      setOrder(data.order);
-    })();
-  }, [customer, params.id]);
 
   if (!customer) return <div className="min-h-[40vh]" />;
 
@@ -76,6 +62,7 @@ export default function AccountOrderDetailPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Payment: {PAYMENT_STATUS_LABELS[order.paymentStatus] ?? order.paymentStatus}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">Updates automatically.</p>
           {order.expectedDelivery ? (
             <p className="mt-2 text-sm text-muted-foreground">{order.expectedDelivery}</p>
           ) : null}

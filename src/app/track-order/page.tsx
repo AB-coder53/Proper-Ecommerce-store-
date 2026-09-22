@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { OrderListCard } from "@/components/commerce/OrderListCard";
@@ -9,48 +9,19 @@ import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useLiveGuestTracking, useLiveOrders } from "@/hooks/use-live-orders";
 import { ORDER_STATUS_LABELS } from "@/lib/commerce-constants";
-import type { Order } from "@/lib/commerce-types";
-import type { GuestOrderTracking } from "@/lib/order-tracking";
-import { formatOrderDate } from "@/lib/order-tracking";
+import { formatOrderDate, type GuestOrderTracking } from "@/lib/order-tracking";
 
 export default function TrackOrderPage() {
   const { customer, loading, openAuth } = useCommerce();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersReady, setOrdersReady] = useState(false);
+  const { orders, ready: ordersReady } = useLiveOrders(Boolean(customer));
+  const { tracking, setTracking } = useLiveGuestTracking(!customer);
   const [orderNumber, setOrderNumber] = useState("");
   const [phoneLast4, setPhoneLast4] = useState("");
   const [step, setStep] = useState<"number" | "verify">("number");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [tracking, setTracking] = useState<GuestOrderTracking | null>(null);
-
-  useEffect(() => {
-    if (customer) return;
-    void (async () => {
-      const res = await fetch("/api/orders/track");
-      if (!res.ok) return;
-      const data = (await res.json()) as { tracking?: GuestOrderTracking | null };
-      if (data.tracking) setTracking(data.tracking);
-    })();
-  }, [customer]);
-
-  useEffect(() => {
-    if (!customer) {
-      setOrders([]);
-      setOrdersReady(true);
-      return;
-    }
-    setOrdersReady(false);
-    void (async () => {
-      const res = await fetch("/api/orders");
-      if (res.ok) {
-        const data = (await res.json()) as { orders: Order[] };
-        setOrders(data.orders);
-      }
-      setOrdersReady(true);
-    })();
-  }, [customer]);
 
   const requestCode = async (event: FormEvent) => {
     event.preventDefault();
@@ -117,8 +88,8 @@ export default function TrackOrderPage() {
           Track Your Orders
         </h1>
         <p className="mt-4 text-sm text-muted-foreground">
-          Signed in as <span className="break-all">{customer.email}</span>. Your orders are loaded
-          from your account.
+          Signed in as <span className="break-all">{customer.email}</span>. Status updates
+          automatically as we process, ship, or deliver your order.
         </p>
         {!ordersReady ? (
           <div className="flex min-h-[20vh] items-center justify-center">
@@ -247,6 +218,7 @@ export default function TrackOrderPage() {
             <p className="mt-2 text-sm text-teal">
               Status: {ORDER_STATUS_LABELS[tracking.orderStatus] ?? tracking.orderStatus}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">Updates automatically.</p>
             {tracking.expectedDelivery ? (
               <p className="mt-1 text-sm text-muted-foreground">{tracking.expectedDelivery}</p>
             ) : null}

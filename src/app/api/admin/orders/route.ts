@@ -9,7 +9,7 @@ export async function GET() {
   try {
     await requireAdminSession();
     const orders = await listAllOrders();
-    return NextResponse.json({ orders });
+    return NextResponse.json({ orders }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

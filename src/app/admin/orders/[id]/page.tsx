@@ -63,7 +63,7 @@ export default function AdminOrderDetailPage() {
     })();
   }, [params.id, router]);
 
-  const save = async () => {
+  const save = async (nextStatus = status) => {
     if (!order) return;
     setSaving(true);
     try {
@@ -71,7 +71,7 @@ export default function AdminOrderDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderStatus: status,
+          orderStatus: nextStatus,
           paymentStatus,
           trackingNumber,
           carrier,
@@ -89,7 +89,9 @@ export default function AdminOrderDetailPage() {
       setTrackingNumber(data.order.trackingNumber ?? "");
       setCarrier(data.order.carrier ?? "");
       setTrackingUrl(data.order.trackingUrl ?? "");
-      toast.success("Order status updated");
+      toast.success(
+        `Status updated to ${ORDER_STATUS_LABELS[data.order.orderStatus] ?? data.order.orderStatus}. Customers see this immediately.`,
+      );
       const notes = await fetch(`/api/admin/orders/${data.order.id}/notifications`);
       if (notes.ok) {
         const noteData = (await notes.json()) as { notifications?: OrderNotification[] };
@@ -153,8 +155,22 @@ export default function AdminOrderDetailPage() {
         <section className="rounded-2xl border border-border bg-white p-5">
           <h2 className="font-semibold">Status management</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Payment: {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+            Payment: {PAYMENT_STATUS_LABELS[order.paymentStatus] ?? order.paymentStatus}
           </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["processing", "shipped", "out_for_delivery", "delivered"].map((value) => (
+              <Button
+                key={value}
+                type="button"
+                variant={status === value ? "default" : "outline"}
+                disabled={saving}
+                onClick={() => void save(value)}
+                className="h-11 rounded-full px-4 text-xs tracking-[0.1em] uppercase"
+              >
+                {ORDER_STATUS_LABELS[value] ?? value}
+              </Button>
+            ))}
+          </div>
           <label className="mt-4 block text-sm">
             Payment status
             <select
@@ -215,7 +231,7 @@ export default function AdminOrderDetailPage() {
             disabled={saving}
             className="mt-4 h-10 rounded-full bg-teal px-6 text-xs tracking-[0.1em] text-teal-foreground uppercase"
           >
-            Update status
+            {saving ? "Updating..." : "Update status"}
           </Button>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button asChild variant="outline" className="h-10 rounded-full">

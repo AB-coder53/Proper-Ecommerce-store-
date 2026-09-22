@@ -12,7 +12,7 @@ export async function GET() {
   const session = await getCustomerSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const orders = await withExpectedDelivery(await listOrdersForCustomer(session.id));
-  return NextResponse.json({ orders });
+  return NextResponse.json({ orders }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }
 
 export async function POST(request: Request) {

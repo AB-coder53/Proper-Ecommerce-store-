@@ -1,34 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 import { OrderListCard } from "@/components/commerce/OrderListCard";
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { Button } from "@/components/ui/button";
-import type { Order } from "@/lib/commerce-types";
+import { useLiveOrders } from "@/hooks/use-live-orders";
 
 export default function AccountOrdersPage() {
   const { customer, loading, openAuth } = useCommerce();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [ready, setReady] = useState(false);
+  const { orders, ready } = useLiveOrders(Boolean(customer));
 
   useEffect(() => {
     if (!loading && !customer) openAuth({ type: "generic", redirect: "/account/orders" });
   }, [customer, loading, openAuth]);
-
-  useEffect(() => {
-    if (!customer) return;
-    void (async () => {
-      const res = await fetch("/api/orders");
-      if (res.ok) {
-        const data = (await res.json()) as { orders: Order[] };
-        setOrders(data.orders);
-      }
-      setReady(true);
-    })();
-  }, [customer]);
 
   if (loading || !customer) {
     return (
@@ -44,6 +31,9 @@ export default function AccountOrdersPage() {
       <h1 className="mt-3 font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">
         My Orders
       </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Status updates automatically when we process, ship, or deliver your order.
+      </p>
 
       {!ready ? (
         <div className="flex min-h-[20vh] items-center justify-center">

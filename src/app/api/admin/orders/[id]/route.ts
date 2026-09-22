@@ -22,7 +22,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const order = await getOrderById(id);
     if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
-    return NextResponse.json({ order });
+    return NextResponse.json({ order }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -45,7 +45,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     after(() => {
       void notifyOrderChanges(previous, order);
     });
-    return NextResponse.json({ order });
+    return NextResponse.json({ order }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch (error) {
     const err = error as Error & { status?: number };
     if (err.message === "Unauthorized") {
