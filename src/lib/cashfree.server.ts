@@ -24,11 +24,7 @@ type CashfreePayment = {
 };
 
 function cashfreeEnv(): CashfreeMode {
-  const raw = (
-    process.env["CASHFREE_ENV"] ||
-    process.env["NEXT_PUBLIC_CASHFREE_MODE"] ||
-    "sandbox"
-  )
+  const raw = (process.env["CASHFREE_ENV"] || process.env["NEXT_PUBLIC_CASHFREE_MODE"] || "sandbox")
     .trim()
     .toLowerCase();
   return raw === "production" ? "production" : "sandbox";
