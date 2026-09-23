@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
-import { OrderProcessingOverlay } from "@/components/commerce/OrderProcessingScreen";
+import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
+import { OrderPlaced } from "@/app/checkout/success/page";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
@@ -17,18 +18,10 @@ import {
   formatCartIssue,
   validateDisplayCartLines,
   type CartIssue,
-  type DisplayCartLine,
 } from "@/lib/cart-display";
 import { loadCashfreeCheckout } from "@/lib/cashfree-checkout";
 import { BUY_NOW_KEY, CHECKOUT_DRAFT_KEY } from "@/lib/commerce-constants";
-import type {
-  CartItemInput,
-  CartLine,
-  CheckoutInput,
-  CustomerAddress,
-  Order,
-} from "@/lib/commerce-types";
-import type { Product } from "@/lib/catalog-types";
+import type { CartItemInput, CheckoutInput, CustomerAddress, Order } from "@/lib/commerce-types";
 import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
@@ -37,17 +30,9 @@ export default function CheckoutClient() {
   const router = useRouter();
   const params = useSearchParams();
   const mode = params.get("mode") === "buy_now" ? "buy_now" : "cart";
-  const {
-    customer,
-    cart,
-    guestCart,
-    openAuth,
-    loading,
-    applySuccessfulOrder,
-    refreshSession,
-    openCart,
-  } = useCommerce();
-  const { products, refresh: refreshCatalog } = useCatalog();
+  const { customer, cart, guestCart, openAuth, loading, applySuccessfulOrder, openCart } =
+    useCommerce();
+  const { products } = useCatalog();
   const { hasOffer, promoCode } = useIstefadaOffer();
 
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -63,6 +48,8 @@ export default function CheckoutClient() {
   const [buyNow, setBuyNow] = useState<CartItemInput | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  const [confirmed, setConfirmed] = useState<{ orderNumber: string; paid: boolean } | null>(null);
   const [error, setError] = useState("");
   const [issues, setIssues] = useState<CartIssue[]>([]);
   const [couponInput, setCouponInput] = useState("");
@@ -73,7 +60,6 @@ export default function CheckoutClient() {
     error?: string;
   } | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
-  const priceSnapshot = useRef<Record<string, number>>({});
   const checkoutIdRef = useRef(
     typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : "",
   );
@@ -91,8 +77,11 @@ export default function CheckoutClient() {
   }, [mode]);
 
   useEffect(() => {
-    void refreshSession();
-  }, [refreshSession]);
+    router.prefetch("/checkout/success");
+    const mode =
+      process.env["NEXT_PUBLIC_CASHFREE_MODE"] === "production" ? "production" : "sandbox";
+    void loadCashfreeCheckout(mode).catch(() => undefined);
+  }, [router]);
 
   useEffect(() => {
     if (!customer) return;
@@ -123,11 +112,6 @@ export default function CheckoutClient() {
       products,
     });
   }, [mode, buyNow, customer, cart, guestCart, products]);
-
-  useEffect(() => {
-    if (!lines.length || Object.keys(priceSnapshot.current).length) return;
-    priceSnapshot.current = Object.fromEntries(lines.map((line) => [line.key, line.unitPrice]));
-  }, [lines]);
 
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   const istefadaDiscount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
@@ -179,64 +163,6 @@ export default function CheckoutClient() {
     }
   };
 
-  const collectFreshLines = async (): Promise<{
-    displayLines: DisplayCartLine[];
-    freshProducts: Product[];
-    foundIssues: CartIssue[];
-  }> => {
-    const [catalogRes, cartRes] = await Promise.all([
-      fetch("/api/catalog?live=1", { cache: "no-store" }),
-      customer && mode !== "buy_now" ? fetch("/api/customer/cart") : Promise.resolve(null),
-    ]);
-    const catalogData = catalogRes.ok
-      ? ((await catalogRes.json()) as { products?: Product[] })
-      : { products };
-    const freshProducts = catalogData.products ?? products;
-
-    let displayLines: DisplayCartLine[];
-    if (mode === "buy_now" && buyNow) {
-      displayLines = [displayLineFromInput(buyNow, freshProducts)];
-    } else if (customer) {
-      const cartData =
-        cartRes && cartRes.ok
-          ? ((await cartRes.json()) as { items?: CartLine[] })
-          : { items: cart };
-      displayLines = buildDisplayCartLines({
-        customer: true,
-        cart: cartData.items ?? cart,
-        guestCart: [],
-        products: freshProducts,
-      });
-    } else {
-      displayLines = buildDisplayCartLines({
-        customer: false,
-        cart: [],
-        guestCart,
-        products: freshProducts,
-      });
-    }
-
-    const foundIssues = validateDisplayCartLines(displayLines, freshProducts);
-    for (const line of displayLines) {
-      const previousPrice = priceSnapshot.current[line.key];
-      if (previousPrice != null && previousPrice !== line.unitPrice) {
-        foundIssues.push({
-          key: `${line.key}-price`,
-          productId: line.productId,
-          name: line.name,
-          size: line.size,
-          color: line.color,
-          type: "price",
-          message: `The price of ${line.name} has changed. Please review your cart before continuing.`,
-        });
-      }
-    }
-    priceSnapshot.current = Object.fromEntries(
-      displayLines.map((line) => [line.key, line.unitPrice]),
-    );
-    return { displayLines, freshProducts, foundIssues };
-  };
-
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!customer || submittingRef.current) return;
@@ -246,10 +172,8 @@ export default function CheckoutClient() {
     setIssues([]);
     let placed = false;
     try {
-      const { foundIssues } = await collectFreshLines();
+      const foundIssues = validateDisplayCartLines(lines, products);
       if (foundIssues.length) {
-        await refreshCatalog(true);
-        await refreshSession();
         setIssues(foundIssues);
         setError(
           foundIssues.some((issue) => issue.type !== "price")
@@ -325,14 +249,15 @@ export default function CheckoutClient() {
             { status: res.status },
           );
         }
+        setPlacing(true);
+        const paid = data.order.paymentStatus === "paid";
+        setConfirmed({ orderNumber: data.order.orderNumber, paid });
         sessionStorage.removeItem(BUY_NOW_KEY);
         sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
-        await applySuccessfulOrder(data.order, mode);
-        router.push(
-          `/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}${
-            data.order.paymentStatus === "paid" ? "&paid=1" : ""
-          }`,
+        router.replace(
+          `/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}${paid ? "&paid=1" : ""}`,
         );
+        void applySuccessfulOrder(data.order, mode);
       };
 
       if (payData.skipPayment) {
@@ -365,6 +290,7 @@ export default function CheckoutClient() {
         setError(result.error.message);
         return;
       }
+      setPlacing(true);
       await place(payData.cashfreeOrderId);
       placed = true;
     } catch (err) {
@@ -372,11 +298,29 @@ export default function CheckoutClient() {
     } finally {
       setPaying(false);
       if (!placed) {
+        setPlacing(false);
         submittingRef.current = false;
         setSubmitting(false);
       }
     }
   };
+
+  if (confirmed) {
+    return <OrderPlaced orderNumber={confirmed.orderNumber} paid={confirmed.paid} />;
+  }
+
+  if (submitting && !paying) {
+    return (
+      <OrderProcessingScreen
+        title={placing ? "Placing your order" : "Opening secure payment"}
+        subtitle={
+          placing
+            ? "Payment received. Confirming your order."
+            : "Please wait — Cashfree checkout is starting."
+        }
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -425,7 +369,6 @@ export default function CheckoutClient() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-      {submitting && !paying ? <OrderProcessingOverlay /> : null}
       <h1 className="font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">Checkout</h1>
       <p className="mt-3 text-sm text-muted-foreground">
         Confirm your details, then pay securely with Cashfree.

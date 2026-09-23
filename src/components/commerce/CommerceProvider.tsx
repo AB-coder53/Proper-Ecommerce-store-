@@ -424,7 +424,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
 
   const applySuccessfulOrder = useCallback(
     async (order: Order, mode: "cart" | "buy_now") => {
-      void refreshCatalog(true);
+      void refreshCatalog(false);
       const ordered = new Set(
         (order.items ?? []).map((item) =>
           guestLineKey({ productId: item.productId, size: item.size, color: item.color }),

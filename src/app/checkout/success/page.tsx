@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 
@@ -9,28 +9,7 @@ import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
 import { Button } from "@/components/ui/button";
 
-function SuccessInner() {
-  const params = useSearchParams();
-  const orderNumber = params.get("order") || "";
-  const paid = params.get("paid") === "1";
-  const { closeCart } = useCommerce();
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    closeCart();
-    const timer = window.setTimeout(() => setReady(true), 1100);
-    return () => window.clearTimeout(timer);
-  }, [closeCart]);
-
-  if (!ready) {
-    return (
-      <OrderProcessingScreen
-        title="Confirming your order"
-        subtitle="Just a moment while we finish placing it."
-      />
-    );
-  }
-
+export function OrderPlaced({ orderNumber, paid }: { orderNumber: string; paid: boolean }) {
   return (
     <div className="mx-auto max-w-lg px-5 py-20 text-center sm:px-8">
       <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-teal text-teal-foreground">
@@ -75,6 +54,19 @@ function SuccessInner() {
       </div>
     </div>
   );
+}
+
+function SuccessInner() {
+  const params = useSearchParams();
+  const orderNumber = params.get("order") || "";
+  const paid = params.get("paid") === "1";
+  const { closeCart } = useCommerce();
+
+  useEffect(() => {
+    closeCart();
+  }, [closeCart]);
+
+  return <OrderPlaced orderNumber={orderNumber} paid={paid} />;
 }
 
 export default function CheckoutSuccessPage() {

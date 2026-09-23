@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
+import { OrderPlaced } from "@/app/checkout/success/page";
 import { BUY_NOW_KEY, CHECKOUT_DRAFT_KEY } from "@/lib/commerce-constants";
 import type { CheckoutInput, Order } from "@/lib/commerce-types";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
@@ -15,6 +16,7 @@ function ReturnInner() {
   const cashfreeOrderId = params.get("order_id") || "";
   const { applySuccessfulOrder } = useCommerce();
   const [error, setError] = useState("");
+  const [confirmed, setConfirmed] = useState<{ orderNumber: string; paid: boolean } | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
@@ -42,15 +44,20 @@ function ReturnInner() {
         }
         sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
         sessionStorage.removeItem(BUY_NOW_KEY);
-        await applySuccessfulOrder(data.order, draft.mode === "buy_now" ? "buy_now" : "cart");
+        setConfirmed({ orderNumber: data.order.orderNumber, paid: true });
         router.replace(
           `/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}&paid=1`,
         );
+        void applySuccessfulOrder(data.order, draft.mode === "buy_now" ? "buy_now" : "cart");
       } catch {
         setError("Something went wrong while confirming payment. Please try again.");
       }
     })();
   }, [applySuccessfulOrder, cashfreeOrderId, router]);
+
+  if (confirmed) {
+    return <OrderPlaced orderNumber={confirmed.orderNumber} paid={confirmed.paid} />;
+  }
 
   if (error) {
     return (
