@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
-import { OrderPlaced } from "@/app/checkout/success/page";
+import { OrderPlaced } from "@/components/commerce/OrderPlaced";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";

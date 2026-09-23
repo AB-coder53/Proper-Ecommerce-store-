@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { OrderProcessingScreen } from "@/components/commerce/OrderProcessingScreen";
-import { OrderPlaced } from "@/app/checkout/success/page";
+import { OrderPlaced } from "@/components/commerce/OrderPlaced";
 import { BUY_NOW_KEY, CHECKOUT_DRAFT_KEY } from "@/lib/commerce-constants";
 import type { CheckoutInput, Order } from "@/lib/commerce-types";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
