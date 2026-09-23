@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 function SuccessInner() {
   const params = useSearchParams();
   const orderNumber = params.get("order") || "";
+  const paid = params.get("paid") === "1";
   const { closeCart } = useCommerce();
   const [ready, setReady] = useState(false);
 
@@ -47,9 +48,9 @@ function SuccessInner() {
         </p>
       ) : null}
       <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
-        Thank you for your order. Payment is still pending confirmation — no charge was taken on the
-        checkout page. We&apos;ll confirm payment details and keep you updated as your order moves
-        through packing and shipping.
+        {paid
+          ? "Thank you. Payment was received through Cashfree and your order is confirmed. We'll keep you updated as it moves through packing and shipping."
+          : "Thank you for your order. We'll keep you updated as it moves through packing and shipping."}
       </p>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <Button

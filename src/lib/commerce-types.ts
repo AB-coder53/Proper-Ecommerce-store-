@@ -49,6 +49,7 @@ export const checkoutSchema = z.object({
   buyNow: cartItemInputSchema.optional(),
   promoCode: z.string().trim().max(40).optional().or(z.literal("")),
   checkoutId: z.string().uuid().optional(),
+  cashfreeOrderId: z.string().trim().min(3).max(50).optional(),
 });
 
 export const trackOrderRequestSchema = z.object({
@@ -195,6 +196,8 @@ export type Order = {
   bundleDiscount?: number;
   invoiceNumber?: string | null;
   paymentMethod?: string | null;
+  paymentId?: string | null;
+  gatewayOrderId?: string | null;
   trackingNumber?: string | null;
   carrier?: string | null;
   trackingUrl?: string | null;

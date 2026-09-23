@@ -19,8 +19,15 @@ import {
   type CartIssue,
   type DisplayCartLine,
 } from "@/lib/cart-display";
-import { BUY_NOW_KEY } from "@/lib/commerce-constants";
-import type { CartItemInput, CartLine, CustomerAddress, Order } from "@/lib/commerce-types";
+import { loadCashfreeCheckout } from "@/lib/cashfree-checkout";
+import { BUY_NOW_KEY, CHECKOUT_DRAFT_KEY } from "@/lib/commerce-constants";
+import type {
+  CartItemInput,
+  CartLine,
+  CheckoutInput,
+  CustomerAddress,
+  Order,
+} from "@/lib/commerce-types";
 import type { Product } from "@/lib/catalog-types";
 import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
@@ -55,6 +62,7 @@ export default function CheckoutClient() {
   const [pincode, setPincode] = useState("");
   const [buyNow, setBuyNow] = useState<CartItemInput | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [paying, setPaying] = useState(false);
   const [error, setError] = useState("");
   const [issues, setIssues] = useState<CartIssue[]>([]);
   const [couponInput, setCouponInput] = useState("");
@@ -254,13 +262,13 @@ export default function CheckoutClient() {
         ? couponQuote.code
         : couponInput.trim() || (hasOffer ? promoCode : undefined);
       const checkoutId = checkoutIdRef.current || undefined;
-      const payload =
+      const payload: CheckoutInput =
         useNewAddress || !selectedAddressId
           ? {
               mode,
-              buyNow: mode === "buy_now" ? buyNow : undefined,
+              ...(mode === "buy_now" && buyNow ? { buyNow } : {}),
               alternatePhone,
-              promoCode: submittedPromo,
+              ...(submittedPromo ? { promoCode: submittedPromo } : {}),
               ...(checkoutId ? { checkoutId } : {}),
               address: {
                 label,
@@ -274,33 +282,95 @@ export default function CheckoutClient() {
             }
           : {
               mode,
-              buyNow: mode === "buy_now" ? buyNow : undefined,
+              ...(mode === "buy_now" && buyNow ? { buyNow } : {}),
               alternatePhone,
               addressId: selectedAddressId,
-              promoCode: submittedPromo,
+              ...(submittedPromo ? { promoCode: submittedPromo } : {}),
               ...(checkoutId ? { checkoutId } : {}),
             };
 
-      const res = await fetch("/api/orders", {
+      sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(payload));
+
+      const payRes = await fetch("/api/payments/order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await readJsonBody<{ order?: Order; error?: string }>(res);
-      if (!res.ok || !data.order) {
-        if (res.status === 409 && typeof crypto !== "undefined" && "randomUUID" in crypto) {
-          checkoutIdRef.current = crypto.randomUUID();
-        }
-        setError(apiErrorMessage(data, "Could not place order. Your cart is unchanged."));
+      const payData = await readJsonBody<{
+        skipPayment?: boolean;
+        alreadyPaid?: boolean;
+        paymentSessionId?: string;
+        cashfreeOrderId?: string;
+        mode?: "sandbox" | "production";
+        error?: string;
+      }>(payRes);
+      if (!payRes.ok) {
+        setError(apiErrorMessage(payData, "Could not start payment. Your cart is unchanged."));
         return;
       }
+
+      const place = async (cashfreeOrderId?: string) => {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, ...(cashfreeOrderId ? { cashfreeOrderId } : {}) }),
+        });
+        const data = await readJsonBody<{ order?: Order; error?: string }>(res);
+        if (!res.ok || !data.order) {
+          if (res.status === 409 && typeof crypto !== "undefined" && "randomUUID" in crypto) {
+            checkoutIdRef.current = crypto.randomUUID();
+          }
+          throw Object.assign(
+            new Error(apiErrorMessage(data, "Could not place order. Your cart is unchanged.")),
+            { status: res.status },
+          );
+        }
+        sessionStorage.removeItem(BUY_NOW_KEY);
+        sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+        await applySuccessfulOrder(data.order, mode);
+        router.push(
+          `/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}${
+            data.order.paymentStatus === "paid" ? "&paid=1" : ""
+          }`,
+        );
+      };
+
+      if (payData.skipPayment) {
+        await place();
+        placed = true;
+        return;
+      }
+
+      if (payData.alreadyPaid && payData.cashfreeOrderId) {
+        await place(payData.cashfreeOrderId);
+        placed = true;
+        return;
+      }
+
+      if (!payData.paymentSessionId || !payData.cashfreeOrderId) {
+        setError("Could not start Cashfree checkout. Try again.");
+        return;
+      }
+
+      setPaying(true);
+      const cashfree = await loadCashfreeCheckout(
+        payData.mode === "production" ? "production" : "sandbox",
+      );
+      const result = await cashfree.checkout({
+        paymentSessionId: payData.paymentSessionId,
+        redirectTarget: "_modal",
+      });
+      setPaying(false);
+      if (result?.error?.message) {
+        setError(result.error.message);
+        return;
+      }
+      await place(payData.cashfreeOrderId);
       placed = true;
-      sessionStorage.removeItem(BUY_NOW_KEY);
-      await applySuccessfulOrder(data.order, mode);
-      router.push(`/checkout/success?order=${encodeURIComponent(data.order.orderNumber)}`);
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
+      setPaying(false);
       if (!placed) {
         submittingRef.current = false;
         setSubmitting(false);
@@ -355,10 +425,10 @@ export default function CheckoutClient() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-      {submitting ? <OrderProcessingOverlay /> : null}
+      {submitting && !paying ? <OrderProcessingOverlay /> : null}
       <h1 className="font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">Checkout</h1>
       <p className="mt-3 text-sm text-muted-foreground">
-        Confirm your details and delivery address to place the order.
+        Confirm your details, then pay securely with Cashfree.
       </p>
 
       <form
@@ -616,14 +686,15 @@ export default function CheckoutClient() {
             {submitting ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                Placing order...
+                {paying ? "Waiting for payment..." : "Confirming payment..."}
               </>
             ) : (
-              "Place Order"
+              `Pay ${formatInr(total)}`
             )}
           </Button>
           <p className="mt-3 text-center text-xs text-muted-foreground">
-            Payment is prepaid at confirmation. No charge is taken on this page yet.
+            Prepaid via Cashfree. UPI, cards, and netbanking. Inventory is reserved only after
+            payment succeeds.
           </p>
         </aside>
       </form>

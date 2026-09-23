@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 
-import { listOrdersForCustomer, placeOrder } from "@/lib/commerce.server";
+import { getCashfreeConfig, verifyCashfreePayment } from "@/lib/cashfree.server";
+import { listOrdersForCustomer, placeOrder, quoteCheckout } from "@/lib/commerce.server";
 import { checkoutSchema } from "@/lib/commerce-types";
 import { getCustomerSession } from "@/lib/customer-auth.server";
 import { notifyOrderEvent } from "@/lib/notifications.server";
@@ -20,7 +21,43 @@ export async function POST(request: Request) {
     const session = await getCustomerSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const body = checkoutSchema.parse(await request.json());
-    const order = await placeOrder(session, body);
+    const quote = await quoteCheckout(session, body);
+    const cashfree = getCashfreeConfig();
+
+    if (quote.totalAmount > 0) {
+      if (!cashfree.configured) {
+        return NextResponse.json(
+          {
+            error:
+              "Cashfree is not configured. Add CASHFREE_APP_ID and CASHFREE_SECRET_KEY, then restart the app.",
+          },
+          { status: 503 },
+        );
+      }
+      if (!body.cashfreeOrderId) {
+        return NextResponse.json(
+          { error: "Complete payment to place this order." },
+          { status: 400 },
+        );
+      }
+      const paid = await verifyCashfreePayment(body.cashfreeOrderId, quote.totalAmount);
+      const order = await placeOrder(session, body, {
+        paymentStatus: "paid",
+        paymentMethod: "cashfree",
+        paymentId: paid.paymentId,
+        gatewayOrderId: paid.cashfreeOrderId,
+      });
+      after(() => {
+        void notifyOrderEvent(order, "order_placed");
+        if (order.paymentStatus === "paid") void notifyOrderEvent(order, "payment_confirmed");
+      });
+      return NextResponse.json({ order });
+    }
+
+    const order = await placeOrder(session, body, {
+      paymentStatus: "paid",
+      paymentMethod: "prepaid",
+    });
     after(() => {
       void notifyOrderEvent(order, "order_placed");
     });

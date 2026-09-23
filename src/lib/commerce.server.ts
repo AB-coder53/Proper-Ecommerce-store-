@@ -292,6 +292,8 @@ function mapOrderRow(row: Record<string, unknown>, items: OrderItem[] = []): Ord
     bundleDiscount: money(val(row, "bundle_discount", "bundleDiscount")),
     invoiceNumber: (val(row, "invoice_number", "invoiceNumber") as string | null) ?? null,
     paymentMethod: (val(row, "payment_method", "paymentMethod") as string | null) ?? "prepaid",
+    paymentId: (val(row, "payment_id", "paymentId") as string | null) ?? null,
+    gatewayOrderId: (val(row, "gateway_order_id", "gatewayOrderId") as string | null) ?? null,
     trackingNumber: (val(row, "tracking_number", "trackingNumber") as string | null) ?? null,
     carrier: (val(row, "carrier") as string | null) ?? null,
     trackingUrl: (val(row, "tracking_url", "trackingUrl") as string | null) ?? null,
@@ -996,7 +998,18 @@ export async function removeWishlistItem(customerId: string, productId: string) 
   return getWishlist(customerId);
 }
 
-export async function placeOrder(customer: CustomerPublic, input: CheckoutInput): Promise<Order> {
+export type OrderPaymentCapture = {
+  paymentStatus?: "paid" | "pending";
+  paymentMethod?: string;
+  paymentId?: string | null;
+  gatewayOrderId?: string | null;
+};
+
+export async function placeOrder(
+  customer: CustomerPublic,
+  input: CheckoutInput,
+  payment?: OrderPaymentCapture,
+): Promise<Order> {
   const checkoutId = input.checkoutId?.trim() || "";
   if (checkoutId) {
     const existing = await findOrderByCheckoutId(customer.id, checkoutId);
@@ -1004,7 +1017,7 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
     const key = `${customer.id}:${checkoutId}`;
     const pending = inflightCheckouts.get(key);
     if (pending) return pending;
-    const task = createPlacedOrder(customer, input, checkoutId);
+    const task = createPlacedOrder(customer, input, checkoutId, payment);
     inflightCheckouts.set(key, task);
     try {
       return await task;
@@ -1012,14 +1025,10 @@ export async function placeOrder(customer: CustomerPublic, input: CheckoutInput)
       inflightCheckouts.delete(key);
     }
   }
-  return createPlacedOrder(customer, input, "");
+  return createPlacedOrder(customer, input, "", payment);
 }
 
-async function createPlacedOrder(
-  customer: CustomerPublic,
-  input: CheckoutInput,
-  checkoutId: string,
-): Promise<Order> {
+async function resolveCheckoutLinesAndTotals(customer: CustomerPublic, input: CheckoutInput) {
   let lines: CartLine[] = [];
   const products = await getProducts();
   const productById = new Map(products.map((product) => [product.id, product]));
@@ -1092,6 +1101,71 @@ async function createPlacedOrder(
     );
   }
 
+  const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  const shippingCost = SHIPPING_COST_INR;
+  let couponQuote = await quoteCoupon({
+    code: input.promoCode,
+    customerId: customer.id,
+    lines,
+  });
+  if (!couponQuote.ok && input.promoCode?.trim().toUpperCase() === ISTEFADA_PROMO_CODE) {
+    const fallback = resolveIstefadaDiscount(input.promoCode, lines);
+    if (fallback > 0) {
+      couponQuote = { ok: true, code: ISTEFADA_PROMO_CODE, discount: fallback };
+    }
+  }
+  if (input.promoCode?.trim() && !couponQuote.ok) {
+    throw Object.assign(new Error(couponQuote.error || "This coupon is not valid."), {
+      status: 409,
+    });
+  }
+  const bundleMatch = bestApplicableBundle(
+    await getBundleOffers(),
+    products,
+    lines.map((line) => line.productId),
+  );
+  const couponDiscount = couponQuote.ok ? couponQuote.discount : 0;
+  const bundleDiscount = bundleMatch?.view.savings ?? 0;
+  const discount = couponDiscount + bundleDiscount;
+  const totalAmount = Math.max(0, subtotal + shippingCost - discount);
+  return {
+    lines,
+    products,
+    resolvedVariants,
+    couponQuote,
+    subtotal,
+    shippingCost,
+    couponDiscount,
+    bundleDiscount,
+    discount,
+    totalAmount,
+  };
+}
+
+export async function quoteCheckout(customer: CustomerPublic, input: CheckoutInput) {
+  const quote = await resolveCheckoutLinesAndTotals(customer, input);
+  return { totalAmount: quote.totalAmount };
+}
+
+async function createPlacedOrder(
+  customer: CustomerPublic,
+  input: CheckoutInput,
+  checkoutId: string,
+  payment?: OrderPaymentCapture,
+): Promise<Order> {
+  const {
+    lines,
+    products,
+    resolvedVariants,
+    couponQuote,
+    subtotal,
+    shippingCost,
+    couponDiscount,
+    bundleDiscount,
+    discount,
+    totalAmount,
+  } = await resolveCheckoutLinesAndTotals(customer, input);
+
   let address: CustomerAddress | null = null;
   if (input.addressId) {
     const addresses = await listAddresses(customer.id);
@@ -1120,33 +1194,6 @@ async function createPlacedOrder(
     });
   }
 
-  const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-  const shippingCost = SHIPPING_COST_INR;
-  let couponQuote = await quoteCoupon({
-    code: input.promoCode,
-    customerId: customer.id,
-    lines,
-  });
-  if (!couponQuote.ok && input.promoCode?.trim().toUpperCase() === ISTEFADA_PROMO_CODE) {
-    const fallback = resolveIstefadaDiscount(input.promoCode, lines);
-    if (fallback > 0) {
-      couponQuote = { ok: true, code: ISTEFADA_PROMO_CODE, discount: fallback };
-    }
-  }
-  if (input.promoCode?.trim() && !couponQuote.ok) {
-    throw Object.assign(new Error(couponQuote.error || "This coupon is not valid."), {
-      status: 409,
-    });
-  }
-  const bundleMatch = bestApplicableBundle(
-    await getBundleOffers(),
-    products,
-    lines.map((line) => line.productId),
-  );
-  const couponDiscount = couponQuote.ok ? couponQuote.discount : 0;
-  const bundleDiscount = bundleMatch?.view.savings ?? 0;
-  const discount = couponDiscount + bundleDiscount;
-  const totalAmount = Math.max(0, subtotal + shippingCost - discount);
   const now = new Date().toISOString();
   const orderId = randomUUID();
   const orderNumber = makeOrderNumber();
@@ -1168,14 +1215,16 @@ async function createPlacedOrder(
     shippingCost,
     discount,
     totalAmount,
-    paymentStatus: "pending",
+    paymentStatus: payment?.paymentStatus ?? "pending",
     orderStatus: "placed",
     inventoryState: "none",
     promoCode: couponQuote.code || null,
     couponDiscount,
     bundleDiscount,
     invoiceNumber: null,
-    paymentMethod: "prepaid",
+    paymentMethod: payment?.paymentMethod ?? "prepaid",
+    paymentId: payment?.paymentId ?? null,
+    gatewayOrderId: payment?.gatewayOrderId ?? null,
     trackingNumber: null,
     carrier: null,
     trackingUrl: null,
@@ -1248,6 +1297,8 @@ async function createPlacedOrder(
           coupon_discount: orderBase.couponDiscount,
           bundle_discount: orderBase.bundleDiscount,
           payment_method: orderBase.paymentMethod,
+          payment_id: orderBase.paymentId,
+          gateway_order_id: orderBase.gatewayOrderId,
           checkout_id: checkoutId || null,
           created_at: orderBase.createdAt,
           updated_at: orderBase.updatedAt,
@@ -1255,6 +1306,11 @@ async function createPlacedOrder(
         let { error: orderError } = await sb.from("orders").insert(orderPayload);
         if (orderError && /checkout_id/i.test(orderError.message ?? "")) {
           delete orderPayload["checkout_id"];
+          ({ error: orderError } = await sb.from("orders").insert(orderPayload));
+        }
+        if (orderError && /payment_id|gateway_order_id/i.test(orderError.message ?? "")) {
+          delete orderPayload["payment_id"];
+          delete orderPayload["gateway_order_id"];
           ({ error: orderError } = await sb.from("orders").insert(orderPayload));
         }
         if (orderError) throw orderError;
@@ -1770,6 +1826,8 @@ function orderInsertPayload(order: Omit<Order, "items">) {
     coupon_discount: order.couponDiscount,
     bundle_discount: order.bundleDiscount,
     payment_method: order.paymentMethod,
+    payment_id: order.paymentId,
+    gateway_order_id: order.gatewayOrderId,
     tracking_number: order.trackingNumber,
     carrier: order.carrier,
     tracking_url: order.trackingUrl,
