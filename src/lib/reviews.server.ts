@@ -12,6 +12,7 @@ import {
   averageRating,
   publicReviewerName,
   ratingDistribution,
+  adminReviewInputSchema,
   reviewInputSchema,
   sanitizeReviewText,
   type AdminReview,
@@ -120,10 +121,16 @@ function mapRow(row: Record<string, unknown>): StoredReview {
   return {
     id: String(row["id"]),
     productId: String(row["product_id"] ?? row["productId"]),
-    customerId: String(row["customer_id"] ?? row["customerId"]),
+    customerId:
+      row["customer_id"] == null && row["customerId"] == null
+        ? ""
+        : String(row["customer_id"] ?? row["customerId"] ?? ""),
     customerName: String(row["customer_name"] ?? row["customerName"] ?? "Customer"),
     customerEmail: String(row["customer_email"] ?? row["customerEmail"] ?? ""),
-    orderId: String(row["order_id"] ?? row["orderId"]),
+    orderId:
+      row["order_id"] == null && row["orderId"] == null
+        ? ""
+        : String(row["order_id"] ?? row["orderId"] ?? ""),
     orderNumber: String(row["order_number"] ?? row["orderNumber"] ?? ""),
     variantId: (row["variant_id"] as string | null) ?? (row["variantId"] as string | null) ?? null,
     color: (row["color"] as string | null) ?? null,
@@ -144,7 +151,9 @@ function toPublic(review: StoredReview): PublicReview {
     productId: review.productId,
     rating: review.rating,
     body: review.body,
-    displayName: publicReviewerName(review.customerName),
+    displayName: review.verifiedPurchase
+      ? publicReviewerName(review.customerName)
+      : review.customerName,
     verifiedPurchase: review.verifiedPurchase,
     color: review.color,
     size: review.size,
@@ -368,6 +377,75 @@ export async function submitReview(productId: string, customer: CustomerPublic, 
     status: review.status,
     message: "Thanks. Your review is pending approval.",
   };
+}
+
+export async function createAdminReview(input: unknown) {
+  const parsed = adminReviewInputSchema.parse({
+    ...(input as object),
+    body: sanitizeReviewText(String((input as { body?: string }).body ?? "")),
+  });
+  const product = await getProductById(parsed.productId);
+  if (!product) fail("Product not found.", 404);
+  const color = parsed.color?.trim() || null;
+  const size = parsed.size?.trim() || null;
+  if (color && !product.colors.includes(color)) fail("That colour is not on this product.", 400);
+  if (size && !product.sizes.includes(size)) fail("That size is not on this product.", 400);
+
+  const now = new Date().toISOString();
+  const review: StoredReview = {
+    id: randomUUID(),
+    productId: product.id,
+    customerId: "",
+    customerName: parsed.reviewerName,
+    customerEmail: "",
+    orderId: "",
+    orderNumber: "",
+    variantId: null,
+    color,
+    size,
+    rating: parsed.rating,
+    body: parsed.body,
+    status: "approved",
+    verifiedPurchase: false,
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await withDbOrFile(
+    async () => {
+      const { error } = await db().from("product_reviews").insert({
+        id: review.id,
+        product_id: review.productId,
+        customer_id: null,
+        order_id: null,
+        variant_id: null,
+        color: review.color,
+        size: review.size,
+        rating: review.rating,
+        body: review.body,
+        customer_name: review.customerName,
+        customer_email: null,
+        order_number: null,
+        status: "approved",
+        verified_purchase: false,
+      });
+      if (error && /null value|not-null/i.test(error.message)) {
+        fail(
+          "Client reviews need a database update. Run supabase/migrations/20260923180000_admin_reviews.sql in the Supabase SQL editor.",
+          503,
+        );
+      }
+      if (error) throw error;
+    },
+    async () => {
+      const store = await readStore();
+      store.reviews.unshift(review);
+      await writeStore(store.reviews);
+    },
+  );
+
+  return toAdmin(review);
 }
 
 export async function listAdminReviews(filters?: { status?: string; productId?: string }) {

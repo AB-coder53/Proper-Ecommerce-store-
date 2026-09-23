@@ -3,6 +3,7 @@
 import { ArrowRight, Check, CheckCircle2, Gift } from "lucide-react";
 import { useState } from "react";
 
+import { IstefadaCountdown } from "@/components/privilege/IstefadaCountdown";
 import { ASSETS, PROMO_CODE } from "@/lib/privilege/content";
 
 type RewardSectionProps = {
@@ -37,6 +38,8 @@ export function RewardSection({ onShopNow }: RewardSectionProps) {
           ISTEFADA ILMIYAH SPECIAL • SURAT
         </span>
       </div>
+
+      <IstefadaCountdown />
 
       <div className="relative w-full bg-ink text-ink-foreground p-6 shadow-md mb-7 overflow-hidden text-left reward-card-unlock transition-all duration-300 hover:shadow-xl rounded-2xl">
         <div className="card-shimmer-sweep" />

@@ -7,6 +7,15 @@ export const REVIEW_PAGE_SIZE = 5;
 
 export const reviewStatusSchema = z.enum(REVIEW_STATUSES);
 
+export const adminReviewInputSchema = z.object({
+  productId: z.string().trim().min(1).max(80),
+  reviewerName: z.string().trim().min(2).max(120),
+  rating: z.number().int().min(1).max(5),
+  body: z.string().trim().min(10, "Write at least 10 characters.").max(REVIEW_MAX_LENGTH),
+  color: z.string().trim().max(40).optional().or(z.literal("")),
+  size: z.string().trim().max(10).optional().or(z.literal("")),
+});
+
 export const reviewInputSchema = z.object({
   rating: z.number().int().min(1).max(5),
   body: z
@@ -18,6 +27,7 @@ export const reviewInputSchema = z.object({
 });
 
 export type ReviewInput = z.infer<typeof reviewInputSchema>;
+export type AdminReviewInput = z.infer<typeof adminReviewInputSchema>;
 export type ReviewStatus = z.infer<typeof reviewStatusSchema>;
 
 export type PublicReview = {

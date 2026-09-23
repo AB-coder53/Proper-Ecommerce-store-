@@ -8,13 +8,23 @@ import { StarRating } from "@/components/site/StarRating";
 import { Button } from "@/components/ui/button";
 import type { AdminReview } from "@/lib/reviews";
 
+type CatalogProduct = { id: string; name: string; colors: string[]; sizes: string[] };
+
 export default function AdminReviewsPage() {
   const [username, setUsername] = useState("Admin");
   const [reviews, setReviews] = useState<AdminReview[]>([]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [status, setStatus] = useState("pending");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [productId, setProductId] = useState("");
+  const [reviewerName, setReviewerName] = useState("");
+  const [rating, setRating] = useState("5");
+  const [body, setBody] = useState("");
+  const [color, setColor] = useState("");
+  const [size, setSize] = useState("");
 
   const load = async (nextStatus = status, nextQuery = query) => {
     setLoading(true);
@@ -26,6 +36,11 @@ export default function AdminReviewsPage() {
         return;
       }
       if (authData.username) setUsername(authData.username);
+      const catalogRes = await fetch("/api/catalog");
+      if (catalogRes.ok) {
+        const catalog = (await catalogRes.json()) as { products?: CatalogProduct[] };
+        setProducts(catalog.products ?? []);
+      }
       const res = await fetch(
         `/api/admin/reviews?status=${encodeURIComponent(nextStatus)}&q=${encodeURIComponent(nextQuery)}`,
       );
@@ -39,6 +54,39 @@ export default function AdminReviewsPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  const selected = products.find((product) => product.id === productId);
+
+  const addReview = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId,
+          reviewerName,
+          rating: Number(rating),
+          body,
+          color,
+          size,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not add review.");
+      toast.success("Review added to the product");
+      setReviewerName("");
+      setBody("");
+      setColor("");
+      setSize("");
+      setStatus("approved");
+      await load("approved", query);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add review.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const act = async (id: string, action: "approved" | "rejected" | "delete") => {
     if (action === "delete" && !window.confirm("Delete this review?")) return;
@@ -66,8 +114,114 @@ export default function AdminReviewsPage() {
     <AdminShell username={username}>
       <h1 className="font-display text-3xl font-bold">Reviews</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Approve verified-purchase reviews before they appear on the storefront.
+        Approve customer reviews, or add a past client review so it shows on the product page.
       </p>
+
+      <form
+        className="mt-6 grid gap-3 rounded-3xl border border-border bg-white p-5 sm:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void addReview();
+        }}
+      >
+        <h2 className="font-display text-xl font-bold sm:col-span-2">Add client review</h2>
+        <label className="text-sm">
+          Product
+          <select
+            required
+            value={productId}
+            onChange={(event) => {
+              setProductId(event.target.value);
+              setColor("");
+              setSize("");
+            }}
+            className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
+          >
+            <option value="">Select a product</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          Client name
+          <input
+            required
+            value={reviewerName}
+            onChange={(event) => setReviewerName(event.target.value)}
+            className="mt-1 h-11 w-full rounded-xl border border-border px-3"
+            placeholder="Name shown on the product"
+          />
+        </label>
+        <label className="text-sm">
+          Rating
+          <select
+            value={rating}
+            onChange={(event) => setRating(event.target.value)}
+            className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
+          >
+            {[5, 4, 3, 2, 1].map((value) => (
+              <option key={value} value={value}>
+                {value} star{value === 1 ? "" : "s"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm">
+            Colour
+            <select
+              value={color}
+              onChange={(event) => setColor(event.target.value)}
+              className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
+            >
+              <option value="">Optional</option>
+              {(selected?.colors ?? []).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            Size
+            <select
+              value={size}
+              onChange={(event) => setSize(event.target.value)}
+              className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
+            >
+              <option value="">Optional</option>
+              {(selected?.sizes ?? []).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="text-sm sm:col-span-2">
+          Review
+          <textarea
+            required
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            rows={4}
+            className="mt-1 w-full rounded-xl border border-border px-3 py-2"
+            placeholder="What the client said about this piece"
+          />
+        </label>
+        <div className="sm:col-span-2">
+          <Button
+            type="submit"
+            disabled={saving}
+            className="h-11 rounded-full bg-teal text-teal-foreground"
+          >
+            {saving ? "Adding..." : "Add review"}
+          </Button>
+        </div>
+      </form>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <select
