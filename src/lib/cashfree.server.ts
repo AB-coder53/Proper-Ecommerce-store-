@@ -1,5 +1,6 @@
 import "server-only";
 
+import { CANONICAL_SITE_ORIGIN } from "@/lib/canonical-url";
 import { SITE_URL } from "@/lib/site";
 
 const API_VERSION = "2025-01-01";
@@ -49,6 +50,24 @@ export function getCashfreeConfig() {
     configured: Boolean(appId && secretKey),
     baseUrl: cashfreeBaseUrl(mode),
   };
+}
+
+function httpsOrigin(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return "";
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+function cashfreeReturnUrl() {
+  const override = httpsOrigin(process.env["CASHFREE_RETURN_URL"] || "");
+  const site = httpsOrigin(SITE_URL);
+  const origin = override || site || CANONICAL_SITE_ORIGIN;
+  return `${origin}/checkout/return?order_id={order_id}`;
 }
 
 export function cashfreeOrderIdFromCheckoutId(checkoutId: string) {
@@ -105,7 +124,7 @@ export async function createCashfreeOrder(input: {
   customerPhone: string;
 }) {
   const orderId = cashfreeOrderIdFromCheckoutId(input.checkoutId);
-  const returnUrl = `${SITE_URL}/checkout/return?order_id={order_id}`;
+  const returnUrl = cashfreeReturnUrl();
   try {
     return await cashfreeFetch<CashfreeOrder>("/orders", {
       method: "POST",
