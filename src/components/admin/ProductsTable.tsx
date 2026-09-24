@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { DangerButton } from "@/components/admin/AdminFields";
 import type { Product } from "@/lib/catalog-types";
+import { pillLinkClassName } from "@/lib/button-styles";
 
 export function ProductsTable({ products }: { products: Product[] }) {
   const router = useRouter();
@@ -40,10 +41,7 @@ export function ProductsTable({ products }: { products: Product[] }) {
               <td className="hidden px-4 py-3 md:table-cell">{product.featured ? "Yes" : "No"}</td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/admin/products/${product.id}`}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold"
-                  >
+                  <Link href={`/admin/products/${product.id}`} className={pillLinkClassName}>
                     Edit
                   </Link>
                   <DangerButton

@@ -5,6 +5,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminOrdersTable } from "@/components/admin/AdminOrdersTable";
 import { ExportCsvButton } from "@/components/admin/ExportCsvButton";
 import { getAdminSession } from "@/lib/admin-auth.server";
+import { headerCtaClassName } from "@/lib/button-styles";
 import { listAllOrders } from "@/lib/commerce.server";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +28,7 @@ export default async function AdminOrdersPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <ExportCsvButton type="orders" label="Export CSV" />
-          <Link
-            href="/admin/orders/new"
-            className="inline-flex h-11 items-center rounded-full bg-teal px-5 text-sm font-semibold text-teal-foreground"
-          >
+          <Link href="/admin/orders/new" className={headerCtaClassName}>
             Add order
           </Link>
         </div>

@@ -40,7 +40,7 @@ export function SiteHeader() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "inline-flex h-9 items-center justify-center rounded-full px-4 text-sm font-medium leading-none transition-colors",
                   active
                     ? "bg-background text-foreground shadow-sm"
                     : "text-foreground/75 hover:bg-background hover:text-foreground",
@@ -132,7 +132,7 @@ export function SiteHeader() {
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    "rounded-full px-4 py-3 text-sm font-medium transition-colors",
+                    "inline-flex h-11 items-center justify-center rounded-full px-4 text-sm font-medium leading-none transition-colors",
                     active
                       ? "bg-muted text-foreground shadow-sm"
                       : "text-foreground/80 hover:bg-muted hover:text-foreground",
@@ -148,7 +148,7 @@ export function SiteHeader() {
                 setMobileOpen(false);
                 openCart();
               }}
-              className="rounded-full px-4 py-3 text-left text-sm font-medium text-foreground/80 hover:bg-muted"
+              className="inline-flex h-11 items-center rounded-full px-4 text-left text-sm font-medium leading-none text-foreground/80 hover:bg-muted"
             >
               Cart ({cartCount})
             </button>
@@ -161,7 +161,7 @@ export function SiteHeader() {
                   openAuth({ type: "generic" });
                 }
               }}
-              className="rounded-full px-4 py-3 text-sm font-medium text-foreground/80 hover:bg-muted"
+              className="inline-flex h-11 items-center rounded-full px-4 text-sm font-medium leading-none text-foreground/80 hover:bg-muted"
             >
               {customer ? "My Account" : "Login / Signup"}
             </Link>
@@ -169,7 +169,7 @@ export function SiteHeader() {
               <Link
                 href="/account/orders"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-full px-4 py-3 text-sm font-medium text-foreground/80 hover:bg-muted"
+                className="inline-flex h-11 items-center rounded-full px-4 text-sm font-medium leading-none text-foreground/80 hover:bg-muted"
               >
                 My Orders
               </Link>
@@ -177,7 +177,7 @@ export function SiteHeader() {
             <Link
               href="/track-order"
               onClick={() => setMobileOpen(false)}
-              className="rounded-full px-4 py-3 text-sm font-medium text-foreground/80 hover:bg-muted"
+              className="inline-flex h-11 items-center rounded-full px-4 text-sm font-medium leading-none text-foreground/80 hover:bg-muted"
             >
               Track Your Order
             </Link>

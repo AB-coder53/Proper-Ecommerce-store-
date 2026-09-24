@@ -171,34 +171,27 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   }
 
   const supabase = getSupabaseWriteClient();
-  const payload = toProductInsert(product);
-
-  const persist = async (body: ProductInsert) => {
+  const persist = async (body: Record<string, unknown>) => {
     if (mode === "create") {
-      return supabase.from("products").insert(body).select("*").single();
+      return supabase.from("products").insert(body as ProductInsert).select("*").single();
     }
-    return supabase.from("products").update(body).eq("id", product.id).select("*").single();
+    return supabase
+      .from("products")
+      .update(body as ProductInsert)
+      .eq("id", product.id)
+      .select("*")
+      .single();
   };
 
-  let { data, error } = await persist(payload);
-  if (error && /compare_at_price/.test(error.message)) {
-    const { compare_at_price: _ignored, ...withoutCompare } = payload as ProductInsert & {
-      compare_at_price?: string | null;
-    };
-    void _ignored;
-    ({ data, error } = await persist(withoutCompare));
-  }
-  if (error && /size_chart/.test(error.message)) {
-    const { size_chart: _ignored, ...withoutChart } = payload;
-    void _ignored;
-    ({ data, error } = await persist(withoutChart));
-  }
-  if (error && /color_images/.test(error.message)) {
-    const { color_images: _ignored, ...withoutColorImages } = payload as ProductInsert & {
-      color_images?: unknown;
-    };
-    void _ignored;
-    ({ data, error } = await persist(withoutColorImages));
+  const body: Record<string, unknown> = { ...toProductInsert(product) };
+  let { data, error } = await persist(body);
+  while (error) {
+    const missing =
+      error.message.match(/Could not find the '([^']+)' column/i)?.[1] ??
+      error.message.match(/column .*[.](\w+) does not exist/i)?.[1];
+    if (!missing || !(missing in body)) break;
+    delete body[missing];
+    ({ data, error } = await persist(body));
   }
   if (error || !data) throw new Error(error?.message ?? "Could not save product");
   const mapped = mapProduct(data);

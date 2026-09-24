@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { DangerButton } from "@/components/admin/AdminFields";
 import type { Collection } from "@/lib/catalog-types";
+import { pillLinkClassName } from "@/lib/button-styles";
 
 export function CollectionsTable({ collections }: { collections: Collection[] }) {
   const router = useRouter();
@@ -38,10 +39,7 @@ export function CollectionsTable({ collections }: { collections: Collection[] })
               <td className="hidden px-4 py-3 sm:table-cell">{collection.productId || "—"}</td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/admin/collections/${collection.id}`}
-                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold"
-                  >
+                  <Link href={`/admin/collections/${collection.id}`} className={pillLinkClassName}>
                     Edit
                   </Link>
                   <DangerButton

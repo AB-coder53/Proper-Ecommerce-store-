@@ -93,7 +93,7 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
           {error ? <p className="text-center text-xs text-destructive">{error}</p> : null}
           <Link
             href={`/collection/${product.id}`}
-            className="inline-flex h-12 items-center justify-center rounded-full border border-border text-xs font-semibold tracking-[0.12em] uppercase transition-colors hover:bg-muted"
+            className="inline-flex h-12 items-center justify-center rounded-full border border-border px-4 text-xs font-semibold leading-none tracking-[0.12em] uppercase transition-colors hover:bg-muted"
           >
             View Details
           </Link>

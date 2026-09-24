@@ -1,3 +1,5 @@
+import { headerOutlineClassName } from "@/lib/button-styles";
+
 export function ExportCsvButton({
   type,
   label,
@@ -6,10 +8,7 @@ export function ExportCsvButton({
   label?: string;
 }) {
   return (
-    <a
-      href={`/api/admin/export/${type}`}
-      className="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-semibold hover:bg-muted"
-    >
+    <a href={`/api/admin/export/${type}`} className={headerOutlineClassName}>
       {label ?? `Export ${type} CSV`}
     </a>
   );

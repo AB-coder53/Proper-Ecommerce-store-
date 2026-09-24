@@ -13,14 +13,22 @@ export type InventoryReason =
 
 export const RELEASE_ORDER_STATUSES = new Set(["cancelled", "failed", "returned"]);
 
-export function makeVariantSku(productId: string, color: string, size: string) {
-  const slug = (value: string) =>
+function slugPart(value: string) {
+  return (
     value
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "x";
-  return `${productId}--${slug(color)}--${slug(size)}`;
+      .replace(/^-+|-+$/g, "") || "x"
+  );
+}
+
+export function makeVariantSku(productId: string, color: string, size: string) {
+  return `${productId}--${slugPart(color)}--${slugPart(size)}`;
+}
+
+export function colorSizeKey(color: string, size: string) {
+  return `${slugPart(color)}__${slugPart(size)}`;
 }
 
 export function stockStatusLabel(stock: number) {
@@ -39,7 +47,15 @@ export function findProductVariant<
     sku?: string | undefined;
   },
 >(variants: T[] | undefined, color: string, size: string) {
-  return variants?.find((row) => row.color === color && row.size === size) ?? null;
+  const wanted = colorSizeKey(color, size);
+  return (
+    variants?.find(
+      (row) =>
+        (row.color === color && row.size === size) ||
+        colorSizeKey(row.color, row.size) === wanted ||
+        (row.sku ? row.sku.endsWith(`--${slugPart(color)}--${slugPart(size)}`) : false),
+    ) ?? null
+  );
 }
 
 export function availableStock(

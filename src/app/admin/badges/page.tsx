@@ -153,12 +153,21 @@ export default function AdminBadgesPage() {
               <p className="text-xs text-muted-foreground">
                 {badge.active ? "Active" : "Inactive"}
               </p>
-              <div className="mt-4 flex gap-3 text-sm">
-                <button className="font-semibold text-teal" onClick={() => setForm(badge)}>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setForm(badge)}
+                >
                   Edit
-                </button>
-                <button
-                  className="text-destructive"
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="rounded-full"
                   onClick={async () => {
                     if (!window.confirm("Delete this badge?")) return;
                     await fetch(`/api/admin/badges/${badge.id}`, { method: "DELETE" });
@@ -166,7 +175,7 @@ export default function AdminBadgesPage() {
                   }}
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             </div>
           ))

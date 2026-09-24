@@ -62,7 +62,7 @@ export function AdminShell({ children, username }: { children: ReactNode; userna
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "inline-flex h-9 items-center justify-center rounded-full px-4 text-sm font-medium leading-none transition-colors",
                   active
                     ? "bg-teal text-teal-foreground"
                     : "bg-muted text-foreground hover:bg-border",

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { DangerButton } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { pillLinkClassName } from "@/lib/button-styles";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUSES,
@@ -157,7 +158,7 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
                       type="button"
                       disabled={busyId === order.id || order.orderStatus === value}
                       onClick={() => void updateStatus(order, value)}
-                      className="h-8 rounded-full border border-border px-2.5 text-[10px] tracking-[0.08em] uppercase disabled:opacity-50"
+                      className="inline-flex h-8 items-center justify-center rounded-full border border-border px-2.5 text-[10px] leading-none tracking-[0.08em] uppercase disabled:opacity-50"
                     >
                       {ORDER_STATUS_LABELS[value]}
                     </button>
@@ -169,10 +170,7 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/admin/orders/${order.id}`}
-                    className="inline-flex h-10 items-center rounded-full border border-border px-3 text-xs font-semibold"
-                  >
+                  <Link href={`/admin/orders/${order.id}`} className={pillLinkClassName}>
                     Edit
                   </Link>
                   <DangerButton

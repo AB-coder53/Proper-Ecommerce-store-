@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { CollectionsTable } from "@/components/admin/CollectionsTable";
 import { getAdminSession } from "@/lib/admin-auth.server";
+import { headerCtaClassName } from "@/lib/button-styles";
 import { getCollections } from "@/lib/catalog.server";
 import { buildPageMetadata } from "@/lib/seo";
 
@@ -28,10 +29,7 @@ export default async function AdminCollectionsPage() {
             These appear in the Discover Collection section on the homepage.
           </p>
         </div>
-        <Link
-          href="/admin/collections/new"
-          className="inline-flex h-11 items-center rounded-full bg-teal px-5 text-sm font-semibold text-teal-foreground"
-        >
+        <Link href="/admin/collections/new" className={headerCtaClassName}>
           Add collection
         </Link>
       </div>

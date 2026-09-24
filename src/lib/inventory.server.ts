@@ -3,7 +3,13 @@ import "server-only";
 import { randomUUID } from "crypto";
 
 import type { Product, ProductVariant } from "@/lib/catalog-types";
-import { DEFAULT_VARIANT_STOCK, makeVariantSku, type InventoryReason } from "@/lib/inventory";
+import {
+  DEFAULT_VARIANT_STOCK,
+  colorSizeKey,
+  findProductVariant,
+  makeVariantSku,
+  type InventoryReason,
+} from "@/lib/inventory";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -45,7 +51,7 @@ export async function listVariantsForProducts(productIds: string[]): Promise<Inv
       .from("product_variants")
       .select("*")
       .in("product_id", productIds);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     return (data ?? []).map((row) => mapVariant(row as Record<string, unknown>));
   });
 }
@@ -65,17 +71,33 @@ export async function attachInventory(products: Product[]): Promise<Product[]> {
     });
     byProduct.set(variant.productId, list);
   }
-  return products.map((product) => ({
-    ...product,
-    variants: (byProduct.get(product.id) ?? product.variants ?? []).filter(
-      (row) => product.colors.includes(row.color) && product.sizes.includes(row.size),
-    ),
-  }));
+  return products.map((product) => {
+    const canonical = new Map<string, { color: string; size: string }>();
+    for (const color of product.colors) {
+      for (const size of product.sizes) {
+        canonical.set(makeVariantSku(product.id, color, size), { color, size });
+      }
+    }
+    const variants = (byProduct.get(product.id) ?? product.variants ?? []).flatMap((row) => {
+      const match = canonical.get(row.sku) ??
+        [...canonical.entries()].find(
+          ([, value]) => colorSizeKey(value.color, value.size) === colorSizeKey(row.color, row.size),
+        )?.[1];
+      if (!match) return [];
+      return [{ ...row, color: match.color, size: match.size }];
+    });
+    return { ...product, variants };
+  });
 }
 
 export async function getVariant(productId: string, color: string, size: string) {
   const variants = await listVariantsForProducts([productId]);
-  return variants.find((row) => row.color === color && row.size === size) ?? null;
+  const sku = makeVariantSku(productId, color, size);
+  return (
+    variants.find((row) => row.sku === sku) ??
+    variants.find((row) => colorSizeKey(row.color, row.size) === colorSizeKey(color, size)) ??
+    null
+  );
 }
 
 export async function syncProductVariants(product: Product) {
@@ -86,9 +108,7 @@ export async function syncProductVariants(product: Product) {
       color,
       size,
       sku: makeVariantSku(product.id, color, size),
-      stock:
-        product.variants?.find((row) => row.color === color && row.size === size)?.stock ??
-        DEFAULT_VARIANT_STOCK,
+      stock: findProductVariant(product.variants, color, size)?.stock ?? DEFAULT_VARIANT_STOCK,
     })),
   );
 
@@ -98,13 +118,30 @@ export async function syncProductVariants(product: Product) {
       .from("product_variants")
       .select("*")
       .eq("product_id", product.id);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     const current = (existing ?? []).map((row) => mapVariant(row as Record<string, unknown>));
-    const keep = new Set(wanted.map((row) => `${row.color}__${row.size}`));
+    const keep = new Set(wanted.map((row) => colorSizeKey(row.color, row.size)));
 
     for (const next of wanted) {
-      const found = current.find((row) => row.color === next.color && row.size === next.size);
+      const found =
+        current.find((row) => row.sku === next.sku) ??
+        current.find((row) => colorSizeKey(row.color, row.size) === colorSizeKey(next.color, next.size));
       if (found) {
+        if (found.color !== next.color || found.size !== next.size || found.sku !== next.sku) {
+          const { error: renameError } = await sb
+            .from("product_variants")
+            .update({
+              color: next.color,
+              size: next.size,
+              sku: next.sku,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", found.id);
+          if (renameError) throw new Error(renameError.message);
+          found.color = next.color;
+          found.size = next.size;
+          found.sku = next.sku;
+        }
         if (found.stock === next.stock) continue;
         const result = await applyStockChange({
           variantId: found.id,
@@ -116,6 +153,7 @@ export async function syncProductVariants(product: Product) {
             status: 400,
           });
         }
+        found.stock = next.stock;
       } else {
         const { error: insertError } = await sb.from("product_variants").insert({
           id: randomUUID(),
@@ -125,18 +163,50 @@ export async function syncProductVariants(product: Product) {
           sku: next.sku,
           stock: next.stock,
         });
-        if (insertError) throw insertError;
+        if (insertError) {
+          if (insertError.code !== "23505") throw new Error(insertError.message);
+          const { data: conflict, error: conflictError } = await sb
+            .from("product_variants")
+            .select("*")
+            .eq("product_id", product.id)
+            .eq("sku", next.sku)
+            .maybeSingle();
+          if (conflictError || !conflict) throw new Error(insertError.message);
+          const mapped = mapVariant(conflict as Record<string, unknown>);
+          const { error: renameError } = await sb
+            .from("product_variants")
+            .update({
+              color: next.color,
+              size: next.size,
+              sku: next.sku,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", mapped.id);
+          if (renameError) throw new Error(renameError.message);
+          if (mapped.stock !== next.stock) {
+            const result = await applyStockChange({
+              variantId: mapped.id,
+              delta: next.stock - mapped.stock,
+              reason: next.stock > mapped.stock ? "STOCK_RESTOCK" : "ADMIN_ADJUSTMENT",
+            });
+            if (!result.ok) {
+              throw Object.assign(new Error(result.error ?? "Could not update stock."), {
+                status: 400,
+              });
+            }
+          }
+        }
       }
     }
 
     for (const row of current) {
-      if (keep.has(`${row.color}__${row.size}`)) continue;
+      if (keep.has(colorSizeKey(row.color, row.size))) continue;
       if (row.stock !== 0) {
         const { error: zeroError } = await sb
           .from("product_variants")
           .update({ stock: 0, updated_at: new Date().toISOString() })
           .eq("id", row.id);
-        if (zeroError) throw zeroError;
+        if (zeroError) throw new Error(zeroError.message);
       }
     }
   });
@@ -164,7 +234,7 @@ export async function applyStockChange(input: {
       p_order_id: input.orderId ?? null,
       p_order_number: input.orderNumber ?? null,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     const payload = (data ?? {}) as {
       ok?: boolean;
       stock?: number;

@@ -305,30 +305,39 @@ export default function AdminReviewsPage() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex flex-wrap justify-end gap-2">
                       {review.status !== "approved" ? (
-                        <button
-                          className="font-semibold text-teal disabled:opacity-50"
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
                           disabled={busyId === review.id}
                           onClick={() => void act(review.id, "approved")}
                         >
                           Approve
-                        </button>
+                        </Button>
                       ) : null}
                       {review.status !== "rejected" ? (
-                        <button
-                          className="font-semibold disabled:opacity-50"
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
                           disabled={busyId === review.id}
                           onClick={() => void act(review.id, "rejected")}
                         >
                           Reject
-                        </button>
+                        </Button>
                       ) : null}
-                      <button
-                        className="text-destructive disabled:opacity-50"
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-full"
                         disabled={busyId === review.id}
                         onClick={() => void act(review.id, "delete")}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </div>
                   </td>
                 </tr>

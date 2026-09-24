@@ -41,7 +41,12 @@ export async function PUT(request: Request, ctx: Ctx) {
         { status: 400 },
       );
     }
-    const message = error instanceof Error ? error.message : "Could not update product";
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "object" && error && "message" in error
+          ? String((error as { message?: unknown }).message ?? "Could not update product")
+          : "Could not update product";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -132,7 +132,7 @@ export async function setProductBadges(productId: string, badgeIds: string[]) {
     const { error } = await db()
       .from("product_badge_assignments")
       .insert(unique.map((badgeId) => ({ product_id: productId, badge_id: badgeId })));
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   });
 }
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { getAdminSession } from "@/lib/admin-auth.server";
+import { headerCtaClassName, pillLinkClassName } from "@/lib/button-styles";
 import { buildPageMetadata } from "@/lib/seo";
 import { formatInr } from "@/lib/price";
 import { bundleOfferStatus } from "@/lib/store-offers";
@@ -29,10 +30,7 @@ export default async function AdminBundlesPage() {
             Active bundles appear on product pages for included items.
           </p>
         </div>
-        <Link
-          href="/admin/bundles/new"
-          className="inline-flex h-11 items-center rounded-full bg-teal px-5 text-sm font-semibold text-teal-foreground"
-        >
+        <Link href="/admin/bundles/new" className={headerCtaClassName}>
           Add bundle
         </Link>
       </div>
@@ -61,7 +59,7 @@ export default async function AdminBundlesPage() {
                   <td className="px-4 py-3">{bundle.productIds.length}</td>
                   <td className="px-4 py-3 capitalize">{bundleOfferStatus(bundle)}</td>
                   <td className="px-4 py-3 text-right">
-                    <Link href={`/admin/bundles/${bundle.id}`} className="font-semibold text-teal">
+                    <Link href={`/admin/bundles/${bundle.id}`} className={pillLinkClassName}>
                       Edit
                     </Link>
                   </td>

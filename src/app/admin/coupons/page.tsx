@@ -246,21 +246,32 @@ export default function AdminCouponsPage() {
                   <td className="px-4 py-3 capitalize">{couponStatus(coupon)}</td>
                   <td className="px-4 py-3">{coupon.currentUsage ?? 0}</td>
                   <td className="px-4 py-3 text-right">
-                    <button className="font-semibold text-teal" onClick={() => setForm(coupon)}>
-                      Edit
-                    </button>
-                    {coupon.id ? (
-                      <button
-                        className="ml-3 text-destructive"
-                        onClick={async () => {
-                          if (!window.confirm("Delete this coupon?")) return;
-                          await fetch(`/api/admin/coupons/${coupon.id}`, { method: "DELETE" });
-                          await load();
-                        }}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setForm(coupon)}
                       >
-                        Delete
-                      </button>
-                    ) : null}
+                        Edit
+                      </Button>
+                      {coupon.id ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={async () => {
+                            if (!window.confirm("Delete this coupon?")) return;
+                            await fetch(`/api/admin/coupons/${coupon.id}`, { method: "DELETE" });
+                            await load();
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))

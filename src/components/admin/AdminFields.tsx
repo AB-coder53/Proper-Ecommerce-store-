@@ -55,7 +55,7 @@ export function SizeChartField({
                 className="hidden"
                 onChange={(e) => onFile(e.target.files?.[0] ?? null)}
               />
-              <span className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-medium">
+              <span className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-medium leading-none">
                 {uploading ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
@@ -82,7 +82,7 @@ export function SizeChartField({
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0] ?? null)}
           />
-          <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium">
+          <span className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium leading-none">
             {uploading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -139,7 +139,7 @@ export function ImageUploadField({
             className="hidden"
             onChange={(e) => onFile(e.target.files?.[0] ?? null)}
           />
-          <span className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium">
+          <span className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-medium leading-none">
             {uploading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -210,8 +210,9 @@ export function DangerButton({
     <Button
       type="button"
       variant="destructive"
+      size="sm"
       disabled={busy}
-      className="rounded-full"
+      className="rounded-full px-3.5"
       onClick={async () => {
         if (!window.confirm("Delete this item permanently?")) return;
         setBusy(true);

@@ -114,6 +114,12 @@
     font-weight: 600;
     letter-spacing: -0.02em;
   }
+
+  button,
+  input:where([type="button"], [type="submit"], [type="reset"]) {
+    appearance: none;
+    -webkit-appearance: none;
+  }
 }
 
 @utility eyebrow {
