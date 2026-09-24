@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Heart, Minus, Plus } from "lucide-react";
 
@@ -27,7 +27,7 @@ import {
 } from "@/lib/inventory";
 import { colorToImageIndex, indexToColor, visibleImageIndexes } from "@/lib/product-colors";
 import { isValidProductVariant } from "@/lib/product-variants";
-import type { ReviewSummary } from "@/lib/reviews";
+import type { ReviewListing } from "@/lib/reviews";
 import type { DeliveryEstimate } from "@/lib/shipping";
 import type { BundleOfferView } from "@/lib/store-offers";
 import { cn } from "@/lib/utils";
@@ -36,12 +36,12 @@ export function ProductDetail({
   product,
   bundles,
   delivery,
-  reviewSummary,
+  reviewListing,
 }: {
   product: Product;
   bundles: BundleOfferView[];
   delivery: DeliveryEstimate;
-  reviewSummary?: ReviewSummary | undefined;
+  reviewListing?: ReviewListing | undefined;
 }) {
   const liveProduct = useProductInventory(product);
   const images = liveProduct.images?.length ? liveProduct.images : [liveProduct.image];
@@ -69,7 +69,9 @@ export function ProductDetail({
 
   const selectColor = (color: string) => {
     setSelectedColor(color);
-    setSelectedImageIndex(colorToImageIndex(color, liveProduct.colors, images));
+    setSelectedImageIndex(
+      colorToImageIndex(color, liveProduct.colors, images, liveProduct.colorImages),
+    );
     if (!variantHasStock(liveProduct, color, selectedSize)) {
       const nextSize = liveProduct.sizes.find((size) => variantHasStock(liveProduct, color, size));
       if (nextSize) setSelectedSize(nextSize);
@@ -78,7 +80,7 @@ export function ProductDetail({
 
   const selectImageIndex = (index: number) => {
     setSelectedImageIndex(index);
-    setSelectedColor(indexToColor(index, liveProduct.colors, images));
+    setSelectedColor(indexToColor(index, liveProduct.colors, images, liveProduct.colorImages));
   };
 
   const go = (dir: number) => {
@@ -93,6 +95,7 @@ export function ProductDetail({
 
   const activeImage =
     images[selectedImageIndex]?.trim() || images.find((src) => src.trim()) || liveProduct.image;
+  const heroPrioritySrc = useRef(activeImage);
   const selected = {
     productId: liveProduct.id,
     size: selectedSize,
@@ -111,7 +114,7 @@ export function ProductDetail({
             width={1120}
             height={1400}
             sizes="(max-width: 1024px) 100vw, 50vw"
-            priority
+            priority={heroPrioritySrc.current === activeImage}
             className="aspect-[4/5] w-full object-cover object-top transition-opacity duration-300"
           />
           {visibleIndexes.length > 1 ? (
@@ -139,7 +142,12 @@ export function ProductDetail({
           <div className="mt-4 grid grid-cols-4 gap-3">
             {visibleIndexes.map((i) => {
               const src = images[i] ?? "";
-              const thumbColor = indexToColor(i, product.colors, images);
+              const thumbColor = indexToColor(
+                i,
+                liveProduct.colors,
+                images,
+                liveProduct.colorImages,
+              );
               const selectedThumb = i === selectedImageIndex;
               return (
                 <button
@@ -193,15 +201,15 @@ export function ProductDetail({
               {product.name}
             </h1>
             <ProductBadgeList product={liveProduct} className="mt-3" />
-            {reviewSummary && reviewSummary.count > 0 ? (
+            {reviewListing && reviewListing.summary.count > 0 ? (
               <a
                 href="#reviews"
                 className="mt-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
               >
-                <StarRating value={Math.round(reviewSummary.average)} size="sm" />
+                <StarRating value={Math.round(reviewListing.summary.average)} size="sm" />
                 <span>
-                  {reviewSummary.average.toFixed(1)} · {reviewSummary.count} review
-                  {reviewSummary.count === 1 ? "" : "s"}
+                  {reviewListing.summary.average.toFixed(1)} · {reviewListing.summary.count} review
+                  {reviewListing.summary.count === 1 ? "" : "s"}
                 </span>
               </a>
             ) : null}
@@ -331,7 +339,7 @@ export function ProductDetail({
 
         <ProductReviews
           productId={product.id}
-          {...(reviewSummary ? { initialSummary: reviewSummary } : {})}
+          {...(reviewListing ? { initialListing: reviewListing } : {})}
         />
 
         <div className="mt-4">

@@ -1,12 +1,26 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
+import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { IstefadaOfferBanner } from "@/components/site/IstefadaOfferBanner";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { SiteHeader } from "@/components/site/SiteHeader";
-import { CartDrawer } from "@/components/commerce/CartDrawer";
+
+const CartDrawer = dynamic(
+  () => import("@/components/commerce/CartDrawer").then((mod) => mod.CartDrawer),
+  { ssr: false },
+);
 
 type ReservationContextValue = {
   unlocked: boolean;
@@ -26,7 +40,13 @@ export function useReservation() {
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { cartDrawerOpen } = useCommerce();
+  const [loadDrawer, setLoadDrawer] = useState(false);
   const ctaLabel = "Shop Collection";
+
+  useEffect(() => {
+    if (cartDrawerOpen) setLoadDrawer(true);
+  }, [cartDrawerOpen]);
 
   const goShop = useCallback(() => {
     router.push("/collection");
@@ -48,7 +68,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen min-w-0 bg-background text-foreground">
         <IstefadaOfferBanner />
         <SiteHeader />
-        <CartDrawer />
+        {loadDrawer ? <CartDrawer /> : null}
         <main>{children}</main>
         <SiteFooter />
       </div>

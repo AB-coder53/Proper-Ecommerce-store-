@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { Product } from "@/lib/catalog-types";
 import { parsePriceInr } from "@/lib/price";
 import type { BundleOffer } from "@/lib/store-offers";
@@ -116,7 +117,7 @@ export function BundleForm({
         </label>
         <label className="space-y-2 text-sm">
           <span className="font-medium">Pricing type</span>
-          <select
+          <NativeSelect
             value={form.pricingType ?? "fixed"}
             onChange={(e) =>
               setForm((prev) => ({
@@ -124,11 +125,10 @@ export function BundleForm({
                 pricingType: e.target.value === "percent" ? "percent" : "fixed",
               }))
             }
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm"
           >
             <option value="fixed">Fixed bundle price</option>
             <option value="percent">Percentage discount</option>
-          </select>
+          </NativeSelect>
         </label>
         {(form.pricingType ?? "fixed") === "percent" ? (
           <label className="space-y-2 text-sm">

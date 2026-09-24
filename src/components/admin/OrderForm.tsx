@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { DangerButton } from "@/components/admin/AdminFields";
 import { OrderTimeline } from "@/components/commerce/OrderTimeline";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { Product } from "@/lib/catalog-types";
 import {
   ORDER_STATUS_LABELS,
@@ -405,10 +406,11 @@ export function OrderForm({
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                   <label className="text-sm lg:col-span-2">
                     Product
-                    <select
+                    <NativeSelect
                       value={item.productId}
+                      wrapperClassName="mt-1.5"
                       onChange={(e) => pickProduct(index, e.target.value)}
-                      className={`mt-1.5 ${INPUT}`}
+                      className={INPUT}
                     >
                       <option value="">Custom item</option>
                       {products.map((row) => (
@@ -416,7 +418,7 @@ export function OrderForm({
                           {row.name}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </label>
                   <label className="text-sm lg:col-span-2">
                     Name
@@ -430,17 +432,18 @@ export function OrderForm({
                   <label className="text-sm">
                     Colour
                     {product?.colors.length ? (
-                      <select
+                      <NativeSelect
                         value={item.color}
+                        wrapperClassName="mt-1.5"
                         onChange={(e) => setItem(index, { color: e.target.value })}
-                        className={`mt-1.5 ${INPUT}`}
+                        className={INPUT}
                       >
                         {product.colors.map((color) => (
                           <option key={color} value={color}>
                             {color}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     ) : (
                       <input
                         required
@@ -453,17 +456,18 @@ export function OrderForm({
                   <label className="text-sm">
                     Size
                     {product?.sizes.length ? (
-                      <select
+                      <NativeSelect
                         value={item.size}
+                        wrapperClassName="mt-1.5"
                         onChange={(e) => setItem(index, { size: e.target.value })}
-                        className={`mt-1.5 ${INPUT}`}
+                        className={INPUT}
                       >
                         {product.sizes.map((size) => (
                           <option key={size} value={size}>
                             {size}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     ) : (
                       <input
                         required
@@ -553,31 +557,33 @@ export function OrderForm({
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
             Order status
-            <select
+            <NativeSelect
               value={form.orderStatus}
+              wrapperClassName="mt-1.5"
               onChange={(e) => setField("orderStatus", e.target.value)}
-              className={`mt-1.5 ${INPUT}`}
+              className={INPUT}
             >
               {[...ORDER_STATUSES, ...EXTRA].map((value) => (
                 <option key={value} value={value}>
                   {ORDER_STATUS_LABELS[value] ?? value}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-sm">
             Payment
-            <select
+            <NativeSelect
               value={form.paymentStatus}
+              wrapperClassName="mt-1.5"
               onChange={(e) => setField("paymentStatus", e.target.value)}
-              className={`mt-1.5 ${INPUT}`}
+              className={INPUT}
             >
               {Object.keys(PAYMENT_STATUS_LABELS).map((value) => (
                 <option key={value} value={value}>
                   {PAYMENT_STATUS_LABELS[value]}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-sm">
             Carrier

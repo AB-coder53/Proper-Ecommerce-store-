@@ -1,8 +1,7 @@
 ﻿import "server-only";
 
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
+import { cache } from "react";
 
 import type { Product } from "@/lib/catalog-types";
 import { getProductById, getProducts, invalidateCatalogCache } from "@/lib/catalog.server";
@@ -56,77 +55,8 @@ export type CustomerRecord = {
   updatedAt: string;
 };
 
-type Store = {
-  customers: CustomerRecord[];
-  addresses: CustomerAddress[];
-  wishlist: { id: string; customerId: string; productId: string; createdAt: string }[];
-  cart: {
-    id: string;
-    customerId: string;
-    productId: string;
-    size: string;
-    color: string;
-    quantity: number;
-    createdAt: string;
-    updatedAt: string;
-  }[];
-  orders: Omit<Order, "items">[];
-  orderItems: (OrderItem & { orderId: string })[];
-};
-
-const DATA_PATH = path.join(process.cwd(), "data", "commerce.json");
-let useFileStore: boolean | null = null;
-
-function emptyStore(): Store {
-  return { customers: [], addresses: [], wishlist: [], cart: [], orders: [], orderItems: [] };
-}
-
-async function readFileStore(): Promise<Store> {
-  try {
-    const raw = await fs.readFile(DATA_PATH, "utf8");
-    return { ...emptyStore(), ...(JSON.parse(raw) as Partial<Store>) };
-  } catch {
-    return emptyStore();
-  }
-}
-
-async function writeFileStore(store: Store) {
-  await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-  await fs.writeFile(DATA_PATH, JSON.stringify(store, null, 2), "utf8");
-}
-
-function isMissingRelation(error: { code?: string; message?: string } | null) {
-  if (!error) return false;
-  return (
-    error.code === "42P01" ||
-    error.code === "PGRST205" ||
-    /relation .* does not exist/i.test(error.message ?? "") ||
-    /Could not find the table/i.test(error.message ?? "")
-  );
-}
-
-async function withDbOrFile<T>(dbFn: () => Promise<T>, fileFn: () => Promise<T>): Promise<T> {
-  if (useFileStore === true) return fileFn();
-  try {
-    const result = await dbFn();
-    useFileStore = false;
-    return result;
-  } catch (error) {
-    const err = error as { code?: string; message?: string; status?: number };
-    if (err.status === 400 || err.status === 401 || err.status === 404 || err.status === 409)
-      throw error;
-    if (useFileStore === false) throw error;
-    // Missing service role / tables → silent JSON fallback (same pattern as catalog)
-    if (
-      isMissingRelation(err) ||
-      /SUPABASE_SERVICE_ROLE_KEY/i.test(err.message ?? "") ||
-      /Missing Supabase/i.test(err.message ?? "")
-    ) {
-      useFileStore = true;
-      return fileFn();
-    }
-    throw error;
-  }
+function withDb<T>(dbFn: () => Promise<T>): Promise<T> {
+  return dbFn();
 }
 
 function val(row: Record<string, unknown>, ...keys: string[]) {
@@ -213,31 +143,21 @@ async function findOrderByCheckoutId(
   customerId: string,
   checkoutId: string,
 ): Promise<Order | null> {
-  const order = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("orders")
-        .select("*")
-        .eq("customer_id", customerId)
-        .eq("checkout_id", checkoutId)
-        .maybeSingle();
-      if (error) {
-        if (/checkout_id/i.test(error.message ?? "")) return null;
-        throw error;
-      }
-      if (!data) return null;
-      return mapOrderRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      return (
-        store.orders.find(
-          (row) => row.customerId === customerId && row.checkoutId === checkoutId,
-        ) ?? null
-      );
-    },
-  );
+  const order = await withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("orders")
+      .select("*")
+      .eq("customer_id", customerId)
+      .eq("checkout_id", checkoutId)
+      .maybeSingle();
+    if (error) {
+      if (/checkout_id/i.test(error.message ?? "")) return null;
+      throw error;
+    }
+    if (!data) return null;
+    return mapOrderRow(data as Record<string, unknown>);
+  });
   if (!order) return null;
   const [full] = await attachItems([order]);
   return full ?? { ...order, items: [] };
@@ -323,68 +243,48 @@ function mapOrderItemRow(row: Record<string, unknown>): OrderItem & { orderId: s
 
 export async function findCustomerByEmail(email: string) {
   const normalized = email.trim().toLowerCase();
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("customers")
-        .select("*")
-        .ilike("email", normalized)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? mapCustomerRow(data as Record<string, unknown>) : null;
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.customers.find((c) => c.email.toLowerCase() === normalized) ?? null;
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("customers")
+      .select("*")
+      .ilike("email", normalized)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapCustomerRow(data as Record<string, unknown>) : null;
+  });
 }
 
-export async function findCustomerById(id: string) {
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb.from("customers").select("*").eq("id", id).maybeSingle();
-      if (error) throw error;
-      return data ? mapCustomerRow(data as Record<string, unknown>) : null;
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.customers.find((c) => c.id === id) ?? null;
-    },
-  );
-}
+export const findCustomerById = cache(async (id: string) => {
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb.from("customers").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? mapCustomerRow(data as Record<string, unknown>) : null;
+  });
+});
 
 export async function createCustomerRecord(customer: CustomerRecord) {
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("customers")
-        .insert({
-          id: customer.id,
-          email: customer.email,
-          password_hash: customer.passwordHash,
-          full_name: customer.fullName,
-          phone: customer.phone,
-          alternate_phone: customer.alternatePhone,
-          status: customer.status,
-          created_at: customer.createdAt,
-          updated_at: customer.updatedAt,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return mapCustomerRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      store.customers.push(customer);
-      await writeFileStore(store);
-      return customer;
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("customers")
+      .insert({
+        id: customer.id,
+        email: customer.email,
+        password_hash: customer.passwordHash,
+        full_name: customer.fullName,
+        phone: customer.phone,
+        alternate_phone: customer.alternatePhone,
+        status: customer.status,
+        created_at: customer.createdAt,
+        updated_at: customer.updatedAt,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapCustomerRow(data as Record<string, unknown>);
+  });
 }
 
 export async function updateCustomerProfile(
@@ -400,177 +300,107 @@ export async function updateCustomerProfile(
   }
   const now = new Date().toISOString();
 
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("customers")
-        .update({
-          full_name: patch.fullName,
-          phone,
-          alternate_phone: alt,
-          updated_at: now,
-        })
-        .eq("id", customerId)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return mapCustomerRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      const idx = store.customers.findIndex((c) => c.id === customerId);
-      if (idx < 0) throw Object.assign(new Error("Customer not found."), { status: 404 });
-      const current = store.customers[idx]!;
-      store.customers[idx] = {
-        ...current,
-        fullName: patch.fullName,
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("customers")
+      .update({
+        full_name: patch.fullName,
         phone,
-        alternatePhone: alt,
-        updatedAt: now,
-      };
-      await writeFileStore(store);
-      return store.customers[idx]!;
-    },
-  );
+        alternate_phone: alt,
+        updated_at: now,
+      })
+      .eq("id", customerId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapCustomerRow(data as Record<string, unknown>);
+  });
 }
 
 export async function setCustomerPasswordHash(customerId: string, passwordHash: string) {
   const now = new Date().toISOString();
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("customers")
-        .update({ password_hash: passwordHash, updated_at: now })
-        .eq("id", customerId)
-        .select("*")
-        .single();
-      if (error) throw error;
-      return mapCustomerRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      const found = store.customers.find((row) => row.id === customerId);
-      if (!found) throw Object.assign(new Error("Customer not found."), { status: 404 });
-      found.passwordHash = passwordHash;
-      found.updatedAt = now;
-      await writeFileStore(store);
-      return found;
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("customers")
+      .update({ password_hash: passwordHash, updated_at: now })
+      .eq("id", customerId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapCustomerRow(data as Record<string, unknown>);
+  });
 }
 
 export async function listAddresses(customerId: string) {
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("customer_addresses")
-        .select("*")
-        .eq("customer_id", customerId)
-        .order("is_default", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((row) => mapAddressRow(row as Record<string, unknown>));
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.addresses
-        .filter((a) => a.customerId === customerId)
-        .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("customer_addresses")
+      .select("*")
+      .eq("customer_id", customerId)
+      .order("is_default", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => mapAddressRow(row as Record<string, unknown>));
+  });
 }
 
 export async function saveAddress(customerId: string, input: AddressInput) {
   const now = new Date().toISOString();
   const id = input.id ?? randomUUID();
 
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      if (input.isDefault) {
-        await sb
-          .from("customer_addresses")
-          .update({ is_default: false })
-          .eq("customer_id", customerId);
-      }
-      const payload = {
-        id,
-        customer_id: customerId,
-        label: input.label,
-        line1: input.line1,
-        line2: input.line2 || null,
-        city: input.city,
-        state: input.state,
-        pincode: input.pincode,
-        is_default: input.isDefault,
-        updated_at: now,
-      };
-      const { data, error } = await sb
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    if (input.isDefault) {
+      await sb
         .from("customer_addresses")
-        .upsert({ ...payload, created_at: now }, { onConflict: "id" })
-        .select("*")
-        .single();
-      if (error) throw error;
-      return mapAddressRow(data as Record<string, unknown>);
-    },
-    async () => {
-      const store = await readFileStore();
-      if (input.isDefault) {
-        store.addresses = store.addresses.map((a) =>
-          a.customerId === customerId ? { ...a, isDefault: false } : a,
-        );
-      }
-      const existing = store.addresses.findIndex((a) => a.id === id);
-      const row: CustomerAddress = {
-        id,
-        customerId,
-        label: input.label,
-        line1: input.line1,
-        line2: input.line2 || null,
-        city: input.city,
-        state: input.state,
-        pincode: input.pincode,
-        isDefault: input.isDefault,
-        createdAt: existing >= 0 ? store.addresses[existing]!.createdAt : now,
-        updatedAt: now,
-      };
-      if (existing >= 0) store.addresses[existing] = row;
-      else store.addresses.push(row);
-      await writeFileStore(store);
-      return row;
-    },
-  );
+        .update({ is_default: false })
+        .eq("customer_id", customerId);
+    }
+    const payload = {
+      id,
+      customer_id: customerId,
+      label: input.label,
+      line1: input.line1,
+      line2: input.line2 || null,
+      city: input.city,
+      state: input.state,
+      pincode: input.pincode,
+      is_default: input.isDefault,
+      updated_at: now,
+    };
+    const { data, error } = await sb
+      .from("customer_addresses")
+      .upsert({ ...payload, created_at: now }, { onConflict: "id" })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return mapAddressRow(data as Record<string, unknown>);
+  });
 }
 
 export async function deleteAddress(customerId: string, addressId: string) {
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("customer_addresses")
-        .delete()
-        .eq("id", addressId)
-        .eq("customer_id", customerId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.addresses = store.addresses.filter(
-        (a) => !(a.id === addressId && a.customerId === customerId),
-      );
-      await writeFileStore(store);
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("customer_addresses")
+      .delete()
+      .eq("id", addressId)
+      .eq("customer_id", customerId);
+    if (error) throw error;
+  });
 }
 
 async function enrichCartLines(
   rows: { id: string; productId: string; size: string; color: string; quantity: number }[],
 ): Promise<CartLine[]> {
+  if (!rows.length) return [];
+  const products = await getProducts();
+  const byId = new Map(products.map((product) => [product.id, product]));
   const lines: CartLine[] = [];
   for (const row of rows) {
-    const product = await getProductById(row.productId);
+    const product = byId.get(row.productId);
     if (!product) continue;
     const unitPrice = parsePriceInr(product.price);
     lines.push({
@@ -590,32 +420,18 @@ async function enrichCartLines(
 }
 
 export async function getCart(customerId: string) {
-  const rows = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb.from("cart_items").select("*").eq("customer_id", customerId);
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        id: String((row as { id: string }).id),
-        productId: String((row as { product_id: string }).product_id),
-        size: String((row as { size: string }).size),
-        color: String((row as { color: string }).color),
-        quantity: Number((row as { quantity: number }).quantity),
-      }));
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.cart
-        .filter((c) => c.customerId === customerId)
-        .map((c) => ({
-          id: c.id,
-          productId: c.productId,
-          size: c.size,
-          color: c.color,
-          quantity: c.quantity,
-        }));
-    },
-  );
+  const rows = await withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb.from("cart_items").select("*").eq("customer_id", customerId);
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: String((row as { id: string }).id),
+      productId: String((row as { product_id: string }).product_id),
+      size: String((row as { size: string }).size),
+      color: String((row as { color: string }).color),
+      quantity: Number((row as { quantity: number }).quantity),
+    }));
+  });
   return enrichCartLines(rows);
 }
 
@@ -666,56 +482,28 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
   const nextQty = existingQty + input.quantity;
   const lineId = existingLine?.id ?? randomUUID();
 
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      if (existingLine) {
-        const { error } = await sb
-          .from("cart_items")
-          .update({ quantity: nextQty, updated_at: now })
-          .eq("id", existingLine.id);
-        if (error) throw error;
-      } else {
-        const { error } = await sb.from("cart_items").insert({
-          id: lineId,
-          customer_id: customerId,
-          product_id: input.productId,
-          size: input.size,
-          color: input.color,
-          quantity: input.quantity,
-          created_at: now,
-          updated_at: now,
-        });
-        if (error) throw error;
-      }
-    },
-    async () => {
-      const store = await readFileStore();
-      const existing = store.cart.find(
-        (c) =>
-          c.customerId === customerId &&
-          c.productId === input.productId &&
-          c.size === input.size &&
-          c.color === input.color,
-      );
-      if (existing) {
-        existing.quantity = nextQty;
-        existing.updatedAt = now;
-      } else {
-        store.cart.push({
-          id: lineId,
-          customerId,
-          productId: input.productId,
-          size: input.size,
-          color: input.color,
-          quantity: input.quantity,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    if (existingLine) {
+      const { error } = await sb
+        .from("cart_items")
+        .update({ quantity: nextQty, updated_at: now })
+        .eq("id", existingLine.id);
+      if (error) throw error;
+    } else {
+      const { error } = await sb.from("cart_items").insert({
+        id: lineId,
+        customer_id: customerId,
+        product_id: input.productId,
+        size: input.size,
+        color: input.color,
+        quantity: input.quantity,
+        created_at: now,
+        updated_at: now,
+      });
+      if (error) throw error;
+    }
+  });
 
   const nextLine = buildCartLine(lineId, product, input.size, input.color, nextQty);
   if (existingLine) {
@@ -747,46 +535,28 @@ export async function setCartItemQuantity(customerId: string, itemId: string, qu
     }
   }
   const now = new Date().toISOString();
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("cart_items")
-        .update({ quantity: Math.min(cap, quantity), updated_at: now })
-        .eq("id", itemId)
-        .eq("customer_id", customerId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      const item = store.cart.find((c) => c.id === itemId && c.customerId === customerId);
-      if (item) {
-        item.quantity = Math.min(cap, quantity);
-        item.updatedAt = now;
-        await writeFileStore(store);
-      }
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("cart_items")
+      .update({ quantity: Math.min(cap, quantity), updated_at: now })
+      .eq("id", itemId)
+      .eq("customer_id", customerId);
+    if (error) throw error;
+  });
   return getCart(customerId);
 }
 
 export async function removeCartItem(customerId: string, itemId: string) {
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("cart_items")
-        .delete()
-        .eq("id", itemId)
-        .eq("customer_id", customerId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.cart = store.cart.filter((c) => !(c.id === itemId && c.customerId === customerId));
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("cart_items")
+      .delete()
+      .eq("id", itemId)
+      .eq("customer_id", customerId);
+    if (error) throw error;
+  });
   return getCart(customerId);
 }
 
@@ -835,108 +605,158 @@ export async function setCartItemVariant(
   }
   const now = new Date().toISOString();
 
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      if (duplicate) {
-        const qty = Math.min(cap, duplicate.quantity + current.quantity);
-        const { error: updateError } = await sb
-          .from("cart_items")
-          .update({ quantity: qty, updated_at: now })
-          .eq("id", duplicate.id)
-          .eq("customer_id", customerId);
-        if (updateError) throw updateError;
-        const { error: deleteError } = await sb
-          .from("cart_items")
-          .delete()
-          .eq("id", itemId)
-          .eq("customer_id", customerId);
-        if (deleteError) throw deleteError;
-        return;
-      }
-      const { error } = await sb
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    if (duplicate) {
+      const qty = Math.min(cap, duplicate.quantity + current.quantity);
+      const { error: updateError } = await sb
         .from("cart_items")
-        .update({ size, color, updated_at: now })
+        .update({ quantity: qty, updated_at: now })
+        .eq("id", duplicate.id)
+        .eq("customer_id", customerId);
+      if (updateError) throw updateError;
+      const { error: deleteError } = await sb
+        .from("cart_items")
+        .delete()
         .eq("id", itemId)
         .eq("customer_id", customerId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      const item = store.cart.find((row) => row.id === itemId && row.customerId === customerId);
-      if (!item) return;
-      if (duplicate) {
-        const other = store.cart.find((row) => row.id === duplicate.id);
-        if (other) {
-          other.quantity = Math.min(cap, other.quantity + item.quantity);
-          other.updatedAt = now;
-        }
-        store.cart = store.cart.filter((row) => row.id !== itemId);
-      } else {
-        item.size = size;
-        item.color = color;
-        item.updatedAt = now;
-      }
-      await writeFileStore(store);
-    },
-  );
+      if (deleteError) throw deleteError;
+      return;
+    }
+    const { error } = await sb
+      .from("cart_items")
+      .update({ size, color, updated_at: now })
+      .eq("id", itemId)
+      .eq("customer_id", customerId);
+    if (error) throw error;
+  });
 
   return getCart(customerId);
 }
 
 export async function clearCart(customerId: string) {
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb.from("cart_items").delete().eq("customer_id", customerId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.cart = store.cart.filter((c) => c.customerId !== customerId);
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb.from("cart_items").delete().eq("customer_id", customerId);
+    if (error) throw error;
+  });
 }
 
 export async function mergeGuestCart(customerId: string, items: CartItemInput[]) {
-  for (const item of items) {
-    try {
-      await upsertCartItem(customerId, item);
-    } catch {
-      // skip invalid products
-    }
+  if (!items.length) return getCart(customerId);
+
+  const [products, currentCart] = await Promise.all([getProducts(), getCart(customerId)]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const now = new Date().toISOString();
+
+  type LineWrite = {
+    id: string;
+    productId: string;
+    size: string;
+    color: string;
+    quantity: number;
+    existed: boolean;
+  };
+
+  const lines = new Map<string, LineWrite>();
+  for (const line of currentCart) {
+    lines.set(`${line.productId}|${line.size}|${line.color}`, {
+      id: line.id,
+      productId: line.productId,
+      size: line.size,
+      color: line.color,
+      quantity: line.quantity,
+      existed: true,
+    });
   }
-  return getCart(customerId);
+
+  const changed: LineWrite[] = [];
+  for (const item of items) {
+    const product = productById.get(item.productId);
+    if (!product) continue;
+    if (!product.sizes.includes(item.size) || !product.colors.includes(item.color)) continue;
+    const variant =
+      product.variants?.find((row) => row.color === item.color && row.size === item.size) ??
+      (await getVariant(item.productId, item.color, item.size));
+    if (!variant || variant.stock <= 0) continue;
+    const key = `${item.productId}|${item.size}|${item.color}`;
+    const existing = lines.get(key);
+    const existingQty = existing?.quantity ?? 0;
+    const cap = Math.min(CART_MAX_QUANTITY, variant.stock);
+    const nextQty = Math.min(cap, existingQty + item.quantity);
+    if (nextQty <= existingQty) continue;
+    const next: LineWrite = {
+      id: existing?.id ?? randomUUID(),
+      productId: item.productId,
+      size: item.size,
+      color: item.color,
+      quantity: nextQty,
+      existed: Boolean(existing),
+    };
+    lines.set(key, next);
+    changed.push(next);
+  }
+
+  if (!changed.length) return currentCart;
+
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const results = await Promise.all(
+      changed.map((line) =>
+        line.existed
+          ? sb
+              .from("cart_items")
+              .update({ quantity: line.quantity, updated_at: now })
+              .eq("id", line.id)
+          : sb.from("cart_items").insert({
+              id: line.id,
+              customer_id: customerId,
+              product_id: line.productId,
+              size: line.size,
+              color: line.color,
+              quantity: line.quantity,
+              created_at: now,
+              updated_at: now,
+            }),
+      ),
+    );
+    const failed = results.find((row) => row.error);
+    if (failed?.error) throw failed.error;
+  });
+
+  return enrichCartLines(
+    [...lines.values()].map((line) => ({
+      id: line.id,
+      productId: line.productId,
+      size: line.size,
+      color: line.color,
+      quantity: line.quantity,
+    })),
+  );
 }
 
 export async function getWishlist(customerId: string): Promise<WishlistItem[]> {
-  const rows = await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb
-        .from("wishlist_items")
-        .select("*")
-        .eq("customer_id", customerId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        id: String((row as { id: string }).id),
-        productId: String((row as { product_id: string }).product_id),
-        createdAt: String((row as { created_at: string }).created_at),
-      }));
-    },
-    async () => {
-      const store = await readFileStore();
-      return store.wishlist
-        .filter((w) => w.customerId === customerId)
-        .map((w) => ({ id: w.id, productId: w.productId, createdAt: w.createdAt }));
-    },
-  );
+  const rows = await withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb
+      .from("wishlist_items")
+      .select("*")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      id: String((row as { id: string }).id),
+      productId: String((row as { product_id: string }).product_id),
+      createdAt: String((row as { created_at: string }).created_at),
+    }));
+  });
 
+  if (!rows.length) return [];
+  const products = await getProducts();
+  const byId = new Map(products.map((product) => [product.id, product]));
   const items: WishlistItem[] = [];
   for (const row of rows) {
-    const product = await getProductById(row.productId);
+    const product = byId.get(row.productId);
     if (!product) continue;
     items.push({
       id: row.id,
@@ -954,47 +774,29 @@ export async function addWishlistItem(customerId: string, productId: string) {
   const product = await getProductById(productId);
   if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
   const now = new Date().toISOString();
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("wishlist_items")
-        .upsert(
-          { id: randomUUID(), customer_id: customerId, product_id: productId, created_at: now },
-          { onConflict: "customer_id,product_id", ignoreDuplicates: true },
-        );
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      if (!store.wishlist.some((w) => w.customerId === customerId && w.productId === productId)) {
-        store.wishlist.push({ id: randomUUID(), customerId, productId, createdAt: now });
-        await writeFileStore(store);
-      }
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("wishlist_items")
+      .upsert(
+        { id: randomUUID(), customer_id: customerId, product_id: productId, created_at: now },
+        { onConflict: "customer_id,product_id", ignoreDuplicates: true },
+      );
+    if (error) throw error;
+  });
   return getWishlist(customerId);
 }
 
 export async function removeWishlistItem(customerId: string, productId: string) {
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("wishlist_items")
-        .delete()
-        .eq("customer_id", customerId)
-        .eq("product_id", productId);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.wishlist = store.wishlist.filter(
-        (w) => !(w.customerId === customerId && w.productId === productId),
-      );
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("wishlist_items")
+      .delete()
+      .eq("customer_id", customerId)
+      .eq("product_id", productId);
+    if (error) throw error;
+  });
   return getWishlist(customerId);
 }
 
@@ -1270,84 +1072,68 @@ async function createPlacedOrder(
   orderBase.inventoryState = "deducted";
 
   try {
-    await withDbOrFile(
-      async () => {
-        const sb = getCommerceDb();
-        const orderPayload: Record<string, unknown> = {
-          id: orderBase.id,
-          order_number: orderBase.orderNumber,
-          customer_id: orderBase.customerId,
-          customer_name: orderBase.customerName,
-          customer_email: orderBase.customerEmail,
-          customer_phone: orderBase.customerPhone,
-          alternate_phone: orderBase.alternatePhone,
-          address_line1: orderBase.addressLine1,
-          address_line2: orderBase.addressLine2,
-          address_city: orderBase.addressCity,
-          address_state: orderBase.addressState,
-          address_pincode: orderBase.addressPincode,
-          subtotal: orderBase.subtotal,
-          shipping_cost: orderBase.shippingCost,
-          discount: orderBase.discount,
-          total_amount: orderBase.totalAmount,
-          payment_status: orderBase.paymentStatus,
-          order_status: orderBase.orderStatus,
-          inventory_state: orderBase.inventoryState,
-          promo_code: orderBase.promoCode,
-          coupon_discount: orderBase.couponDiscount,
-          bundle_discount: orderBase.bundleDiscount,
-          payment_method: orderBase.paymentMethod,
-          payment_id: orderBase.paymentId,
-          gateway_order_id: orderBase.gatewayOrderId,
-          checkout_id: checkoutId || null,
-          created_at: orderBase.createdAt,
-          updated_at: orderBase.updatedAt,
-        };
-        let { error: orderError } = await sb.from("orders").insert(orderPayload);
-        if (orderError && /checkout_id/i.test(orderError.message ?? "")) {
-          delete orderPayload["checkout_id"];
-          ({ error: orderError } = await sb.from("orders").insert(orderPayload));
-        }
-        if (orderError && /payment_id|gateway_order_id/i.test(orderError.message ?? "")) {
-          delete orderPayload["payment_id"];
-          delete orderPayload["gateway_order_id"];
-          ({ error: orderError } = await sb.from("orders").insert(orderPayload));
-        }
-        if (orderError) throw orderError;
+    await withDb(async () => {
+      const sb = getCommerceDb();
+      const orderPayload: Record<string, unknown> = {
+        id: orderBase.id,
+        order_number: orderBase.orderNumber,
+        customer_id: orderBase.customerId,
+        customer_name: orderBase.customerName,
+        customer_email: orderBase.customerEmail,
+        customer_phone: orderBase.customerPhone,
+        alternate_phone: orderBase.alternatePhone,
+        address_line1: orderBase.addressLine1,
+        address_line2: orderBase.addressLine2,
+        address_city: orderBase.addressCity,
+        address_state: orderBase.addressState,
+        address_pincode: orderBase.addressPincode,
+        subtotal: orderBase.subtotal,
+        shipping_cost: orderBase.shippingCost,
+        discount: orderBase.discount,
+        total_amount: orderBase.totalAmount,
+        payment_status: orderBase.paymentStatus,
+        order_status: orderBase.orderStatus,
+        inventory_state: orderBase.inventoryState,
+        promo_code: orderBase.promoCode,
+        coupon_discount: orderBase.couponDiscount,
+        bundle_discount: orderBase.bundleDiscount,
+        payment_method: orderBase.paymentMethod,
+        payment_id: orderBase.paymentId,
+        gateway_order_id: orderBase.gatewayOrderId,
+        checkout_id: checkoutId || null,
+        created_at: orderBase.createdAt,
+        updated_at: orderBase.updatedAt,
+      };
+      let { error: orderError } = await sb.from("orders").insert(orderPayload);
+      if (orderError && /checkout_id/i.test(orderError.message ?? "")) {
+        delete orderPayload["checkout_id"];
+        ({ error: orderError } = await sb.from("orders").insert(orderPayload));
+      }
+      if (orderError && /payment_id|gateway_order_id/i.test(orderError.message ?? "")) {
+        delete orderPayload["payment_id"];
+        delete orderPayload["gateway_order_id"];
+        ({ error: orderError } = await sb.from("orders").insert(orderPayload));
+      }
+      if (orderError) throw orderError;
 
-        const { error: itemsError } = await sb.from("order_items").insert(
-          items.map((item) => ({
-            id: item.id,
-            order_id: item.orderId,
-            product_id: item.productId,
-            product_name: item.productName,
-            product_image: item.productImage,
-            size: item.size,
-            color: item.color,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            line_total: item.lineTotal,
-            variant_id: item.variantId,
-            sku: item.sku,
-          })),
-        );
-        if (itemsError) throw itemsError;
-      },
-      async () => {
-        const store = await readFileStore();
-        if (
-          checkoutId &&
-          store.orders.some(
-            (row) => row.customerId === customer.id && row.checkoutId === checkoutId,
-          )
-        ) {
-          throw Object.assign(new Error("duplicate key checkout_id"), { code: "23505" });
-        }
-        store.orders.push(orderBase);
-        store.orderItems.push(...items);
-        await writeFileStore(store);
-      },
-    );
+      const { error: itemsError } = await sb.from("order_items").insert(
+        items.map((item) => ({
+          id: item.id,
+          order_id: item.orderId,
+          product_id: item.productId,
+          product_name: item.productName,
+          product_image: item.productImage,
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: item.lineTotal,
+          variant_id: item.variantId,
+          sku: item.sku,
+        })),
+      );
+      if (itemsError) throw itemsError;
+    });
   } catch (error) {
     await restoreOrderInventory(
       orderId,
@@ -1360,19 +1146,11 @@ async function createPlacedOrder(
       })),
       "ORDER_RELEASED",
     );
-    await withDbOrFile(
-      async () => {
-        const sb = getCommerceDb();
-        await sb.from("order_items").delete().eq("order_id", orderId);
-        await sb.from("orders").delete().eq("id", orderId);
-      },
-      async () => {
-        const store = await readFileStore();
-        store.orderItems = store.orderItems.filter((item) => item.orderId !== orderId);
-        store.orders = store.orders.filter((order) => order.id !== orderId);
-        await writeFileStore(store);
-      },
-    ).catch(() => undefined);
+    await withDb(async () => {
+      const sb = getCommerceDb();
+      await sb.from("order_items").delete().eq("order_id", orderId);
+      await sb.from("orders").delete().eq("id", orderId);
+    }).catch(() => undefined);
     if (checkoutId && isUniqueConstraintError(error)) {
       const existing = await findOrderByCheckoutId(customer.id, checkoutId);
       if (existing) return existing;
@@ -1414,68 +1192,43 @@ function mergeOrderItems(
 async function attachItems(orders: Omit<Order, "items">[]): Promise<Order[]> {
   if (!orders.length) return [];
   const ids = orders.map((order) => order.id);
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { data, error } = await sb.from("order_items").select("*").in("order_id", ids);
-      if (error) throw error;
-      return mergeOrderItems(
-        orders,
-        (data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
-      );
-    },
-    async () => {
-      const store = await readFileStore();
-      return mergeOrderItems(
-        orders,
-        store.orderItems.filter((item) => ids.includes(item.orderId)),
-      );
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb.from("order_items").select("*").in("order_id", ids);
+    if (error) throw error;
+    return mergeOrderItems(
+      orders,
+      (data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+    );
+  });
 }
 
 async function queryOrders(opts?: { customerId?: string; idOrNumber?: string }): Promise<Order[]> {
   const idOrNumber = opts?.idOrNumber?.trim();
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      let query = sb.from("orders").select("*").order("created_at", { ascending: false });
-      if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
-      if (idOrNumber) {
-        query = isUuid(idOrNumber)
-          ? query.eq("id", idOrNumber)
-          : query.eq("order_number", idOrNumber.toUpperCase());
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      const orders = (data ?? []).map((row) => mapOrderRow(row as Record<string, unknown>));
-      const ids = orders.map((order) => order.id);
-      if (!ids.length) return orders;
-      const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
-      if (itemsRes.error) {
-        console.error("[orders] could not load order items", itemsRes.error);
-        return orders.map((order) => ({ ...order, items: [] }));
-      }
-      return mergeOrderItems(
-        orders,
-        (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
-      );
-    },
-    async () => {
-      const store = await readFileStore();
-      let orders = [...store.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      if (opts?.customerId) {
-        orders = orders.filter((order) => order.customerId === opts.customerId);
-      }
-      if (idOrNumber) {
-        const needle = idOrNumber.toUpperCase();
-        orders = orders.filter(
-          (order) => order.id === idOrNumber || order.orderNumber.toUpperCase() === needle,
-        );
-      }
-      return mergeOrderItems(orders, store.orderItems);
-    },
-  );
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    let query = sb.from("orders").select("*").order("created_at", { ascending: false });
+    if (opts?.customerId) query = query.eq("customer_id", opts.customerId);
+    if (idOrNumber) {
+      query = isUuid(idOrNumber)
+        ? query.eq("id", idOrNumber)
+        : query.eq("order_number", idOrNumber.toUpperCase());
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const orders = (data ?? []).map((row) => mapOrderRow(row as Record<string, unknown>));
+    const ids = orders.map((order) => order.id);
+    if (!ids.length) return orders;
+    const itemsRes = await sb.from("order_items").select("*").in("order_id", ids);
+    if (itemsRes.error) {
+      console.error("[orders] could not load order items", itemsRes.error);
+      return orders.map((order) => ({ ...order, items: [] }));
+    }
+    return mergeOrderItems(
+      orders,
+      (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+    );
+  });
 }
 
 export async function listOrdersForCustomer(customerId: string) {
@@ -1520,26 +1273,15 @@ export async function ensureInvoiceNumber(orderId: string) {
   if (order.invoiceNumber) return order;
   const invoiceNumber = `INV-${order.orderNumber}`;
   const now = new Date().toISOString();
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("orders")
-        .update({ invoice_number: invoiceNumber, updated_at: now })
-        .eq("id", order.id);
-      if (error && /invoice_number/.test(error.message)) return;
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      const found = store.orders.find((row) => row.id === order.id);
-      if (found) {
-        found.invoiceNumber = invoiceNumber;
-        found.updatedAt = now;
-        await writeFileStore(store);
-      }
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("orders")
+      .update({ invoice_number: invoiceNumber, updated_at: now })
+      .eq("id", order.id);
+    if (error && /invoice_number/.test(error.message)) return;
+    if (error) throw error;
+  });
   return { ...order, invoiceNumber };
 }
 
@@ -1589,66 +1331,50 @@ export async function updateOrderStatus(
     inventoryState = "restored";
     invalidateCatalogCache();
   }
-  return withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const payload: Record<string, unknown> = {
-        order_status: nextStatus,
-        payment_status: paymentStatus,
-        inventory_state: inventoryState,
-        tracking_number: trackingNumber,
-        carrier,
-        tracking_url: trackingUrl,
-        updated_at: now,
-      };
-      let { data, error } = await sb
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const payload: Record<string, unknown> = {
+      order_status: nextStatus,
+      payment_status: paymentStatus,
+      inventory_state: inventoryState,
+      tracking_number: trackingNumber,
+      carrier,
+      tracking_url: trackingUrl,
+      updated_at: now,
+    };
+    let { data, error } = await sb
+      .from("orders")
+      .update(payload)
+      .eq("id", existing.id)
+      .select("*")
+      .maybeSingle();
+    if (error && /tracking_number|carrier|tracking_url/.test(error.message)) {
+      const { tracking_number: _a, carrier: _b, tracking_url: _c, ...rest } = payload;
+      void _a;
+      void _b;
+      void _c;
+      ({ data, error } = await sb
         .from("orders")
-        .update(payload)
+        .update(rest)
         .eq("id", existing.id)
         .select("*")
-        .maybeSingle();
-      if (error && /tracking_number|carrier|tracking_url/.test(error.message)) {
-        const { tracking_number: _a, carrier: _b, tracking_url: _c, ...rest } = payload;
-        void _a;
-        void _b;
-        void _c;
-        ({ data, error } = await sb
-          .from("orders")
-          .update(rest)
-          .eq("id", existing.id)
-          .select("*")
-          .maybeSingle());
-      }
-      if (error) throw error;
-      if (!data) throw Object.assign(new Error("Order not found."), { status: 404 });
-      const mapped = mapOrderRow(data as Record<string, unknown>);
-      const itemsRes = await sb.from("order_items").select("*").eq("order_id", existing.id);
-      if (itemsRes.error) {
-        console.error("[orders] could not reload order items", itemsRes.error);
-        return { ...mapped, items: existing.items };
-      }
-      return (
-        mergeOrderItems(
-          [mapped],
-          (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
-        )[0] ?? { ...mapped, items: existing.items }
-      );
-    },
-    async () => {
-      const store = await readFileStore();
-      const order = store.orders.find((row) => row.id === existing.id);
-      if (!order) throw Object.assign(new Error("Order not found."), { status: 404 });
-      order.orderStatus = nextStatus;
-      order.paymentStatus = paymentStatus;
-      order.inventoryState = inventoryState;
-      order.trackingNumber = trackingNumber;
-      order.carrier = carrier;
-      order.trackingUrl = trackingUrl;
-      order.updatedAt = now;
-      await writeFileStore(store);
-      return mergeOrderItems([order], store.orderItems)[0] ?? { ...order, items: existing.items };
-    },
-  );
+        .maybeSingle());
+    }
+    if (error) throw error;
+    if (!data) throw Object.assign(new Error("Order not found."), { status: 404 });
+    const mapped = mapOrderRow(data as Record<string, unknown>);
+    const itemsRes = await sb.from("order_items").select("*").eq("order_id", existing.id);
+    if (itemsRes.error) {
+      console.error("[orders] could not reload order items", itemsRes.error);
+      return { ...mapped, items: existing.items };
+    }
+    return (
+      mergeOrderItems(
+        [mapped],
+        (itemsRes.data ?? []).map((row) => mapOrderItemRow(row as Record<string, unknown>)),
+      )[0] ?? { ...mapped, items: existing.items }
+    );
+  });
 }
 
 async function ensureCustomerForAdminOrder(input: {
@@ -1872,34 +1598,26 @@ export async function createAdminOrder(input: AdminOrderInput): Promise<Order> {
     now,
   );
   try {
-    await withDbOrFile(
-      async () => {
-        const sb = getCommerceDb();
-        const { error } = await sb.from("orders").insert(orderInsertPayload(order));
-        if (error) throw error;
-        const { error: itemsError } = await sb.from("order_items").insert(
-          items.map((item) => ({
-            id: item.id,
-            order_id: item.orderId,
-            product_id: item.productId,
-            product_name: item.productName,
-            product_image: item.productImage,
-            size: item.size,
-            color: item.color,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-            line_total: item.lineTotal,
-          })),
-        );
-        if (itemsError) throw itemsError;
-      },
-      async () => {
-        const store = await readFileStore();
-        store.orders.push(order);
-        store.orderItems.push(...items);
-        await writeFileStore(store);
-      },
-    );
+    await withDb(async () => {
+      const sb = getCommerceDb();
+      const { error } = await sb.from("orders").insert(orderInsertPayload(order));
+      if (error) throw error;
+      const { error: itemsError } = await sb.from("order_items").insert(
+        items.map((item) => ({
+          id: item.id,
+          order_id: item.orderId,
+          product_id: item.productId,
+          product_name: item.productName,
+          product_image: item.productImage,
+          size: item.size,
+          color: item.color,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          line_total: item.lineTotal,
+        })),
+      );
+      if (itemsError) throw itemsError;
+    });
   } catch (error) {
     if (inventoryState === "deducted") {
       await restoreOrderInventory(
@@ -1954,41 +1672,30 @@ export async function updateAdminOrder(orderId: string, input: AdminOrderInput):
   order.invoiceNumber = existing.invoiceNumber ?? null;
   order.promoCode = existing.promoCode ?? null;
   order.checkoutId = existing.checkoutId ?? null;
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      const { error } = await sb
-        .from("orders")
-        .update(orderInsertPayload(order))
-        .eq("id", existing.id);
-      if (error) throw error;
-      await sb.from("order_items").delete().eq("order_id", existing.id);
-      const { error: itemsError } = await sb.from("order_items").insert(
-        items.map((item) => ({
-          id: item.id,
-          order_id: item.orderId,
-          product_id: item.productId,
-          product_name: item.productName,
-          product_image: item.productImage,
-          size: item.size,
-          color: item.color,
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          line_total: item.lineTotal,
-        })),
-      );
-      if (itemsError) throw itemsError;
-    },
-    async () => {
-      const store = await readFileStore();
-      const index = store.orders.findIndex((row) => row.id === existing.id);
-      if (index < 0) throw Object.assign(new Error("Order not found."), { status: 404 });
-      store.orders[index] = order;
-      store.orderItems = store.orderItems.filter((item) => item.orderId !== existing.id);
-      store.orderItems.push(...items);
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    const { error } = await sb
+      .from("orders")
+      .update(orderInsertPayload(order))
+      .eq("id", existing.id);
+    if (error) throw error;
+    await sb.from("order_items").delete().eq("order_id", existing.id);
+    const { error: itemsError } = await sb.from("order_items").insert(
+      items.map((item) => ({
+        id: item.id,
+        order_id: item.orderId,
+        product_id: item.productId,
+        product_name: item.productName,
+        product_image: item.productImage,
+        size: item.size,
+        color: item.color,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        line_total: item.lineTotal,
+      })),
+    );
+    if (itemsError) throw itemsError;
+  });
   invalidateCatalogCache();
   return { ...order, items };
 }
@@ -2010,26 +1717,27 @@ export async function deleteAdminOrder(orderId: string) {
     );
     invalidateCatalogCache();
   }
-  await withDbOrFile(
-    async () => {
-      const sb = getCommerceDb();
-      await sb.from("order_items").delete().eq("order_id", existing.id);
-      const { error } = await sb.from("orders").delete().eq("id", existing.id);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readFileStore();
-      store.orderItems = store.orderItems.filter((item) => item.orderId !== existing.id);
-      store.orders = store.orders.filter((order) => order.id !== existing.id);
-      await writeFileStore(store);
-    },
-  );
+  await withDb(async () => {
+    const sb = getCommerceDb();
+    await sb.from("order_items").delete().eq("order_id", existing.id);
+    const { error } = await sb.from("orders").delete().eq("id", existing.id);
+    if (error) throw error;
+  });
   return { ok: true as const, id: existing.id };
 }
 
+async function listAllAddresses(): Promise<CustomerAddress[]> {
+  return withDb(async () => {
+    const sb = getCommerceDb();
+    const { data, error } = await sb.from("customer_addresses").select("*");
+    if (error) throw error;
+    return (data ?? []).map((row) => mapAddressRow(row as Record<string, unknown>));
+  });
+}
+
 export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {
-  const customers = await withDbOrFile(
-    async () => {
+  const [customers, orders, addresses] = await Promise.all([
+    withDb(async () => {
       const sb = getCommerceDb();
       const { data, error } = await sb
         .from("customers")
@@ -2037,19 +1745,22 @@ export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row) => mapCustomerRow(row as Record<string, unknown>));
-    },
-    async () => {
-      const store = await readFileStore();
-      return [...store.customers].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-  );
+    }),
+    listAllOrders(),
+    listAllAddresses(),
+  ]);
 
-  const orders = await listAllOrders();
-  const result: CustomerAdminRow[] = [];
-  for (const customer of customers) {
+  const addressesByCustomer = new Map<string, CustomerAddress[]>();
+  for (const address of addresses) {
+    const list = addressesByCustomer.get(address.customerId) ?? [];
+    list.push(address);
+    addressesByCustomer.set(address.customerId, list);
+  }
+
+  return customers.map((customer) => {
     const customerOrders = orders.filter((o) => o.customerId === customer.id);
-    const addresses = await listAddresses(customer.id);
-    result.push({
+    const customerAddresses = addressesByCustomer.get(customer.id) ?? [];
+    return {
       id: customer.id,
       email: customer.email,
       fullName: customer.fullName,
@@ -2059,10 +1770,9 @@ export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {
       createdAt: customer.createdAt,
       totalOrders: customerOrders.length,
       totalSpent: customerOrders.reduce((sum, o) => sum + o.totalAmount, 0),
-      defaultAddress: addresses.find((a) => a.isDefault) ?? addresses[0] ?? null,
-    });
-  }
-  return result;
+      defaultAddress: customerAddresses.find((a) => a.isDefault) ?? customerAddresses[0] ?? null,
+    };
+  });
 }
 
 export async function getCustomerAdmin(customerId: string) {

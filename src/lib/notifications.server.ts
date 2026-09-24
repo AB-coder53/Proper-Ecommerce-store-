@@ -1,8 +1,6 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
 
 import type { Order } from "@/lib/commerce-types";
 import {
@@ -14,12 +12,8 @@ import {
   type OrderNotification,
 } from "@/lib/notifications";
 import { SITE_EMAIL, SITE_NAME, SITE_URL } from "@/lib/site";
-import { isMissingTableError } from "@/lib/store-config.shared";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-const DATA_PATH = path.join(process.cwd(), "data", "order-notifications.json");
-let useFileStore: boolean | null = null;
 
 function db(): SupabaseClient {
   return getSupabaseWriteClient() as unknown as SupabaseClient;
@@ -29,46 +23,8 @@ function notificationsDisabled() {
   return process.env["ORDER_NOTIFY_DISABLED"] === "1";
 }
 
-function canFallback(error: unknown) {
-  const err = error as { message?: string };
-  return (
-    isMissingTableError(error) ||
-    /order_notifications/i.test(err.message ?? "") ||
-    /SUPABASE_SERVICE_ROLE_KEY|Missing Supabase/i.test(err.message ?? "")
-  );
-}
-
-async function withDbOrFile<T>(dbFn: () => Promise<T>, fileFn: () => Promise<T>): Promise<T> {
-  if (useFileStore === true) return fileFn();
-  try {
-    const result = await dbFn();
-    useFileStore = false;
-    return result;
-  } catch (error) {
-    const err = error as { status?: number };
-    if (err.status === 409) throw error;
-    if (useFileStore === false && !canFallback(error)) throw error;
-    if (canFallback(error)) {
-      useFileStore = true;
-      return fileFn();
-    }
-    throw error;
-  }
-}
-
-async function readStore(): Promise<{ notifications: OrderNotification[] }> {
-  try {
-    const raw = await fs.readFile(DATA_PATH, "utf8");
-    const data = JSON.parse(raw) as { notifications?: OrderNotification[] };
-    return { notifications: data.notifications ?? [] };
-  } catch {
-    return { notifications: [] };
-  }
-}
-
-async function writeStore(notifications: OrderNotification[]) {
-  await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-  await fs.writeFile(DATA_PATH, `${JSON.stringify({ notifications }, null, 2)}\n`, "utf8");
+function withDb<T>(dbFn: () => Promise<T>): Promise<T> {
+  return dbFn();
 }
 
 function mapRow(row: Record<string, unknown>): OrderNotification {
@@ -108,40 +64,24 @@ async function claimSlot(
     sentAt: null,
     createdAt: now,
   };
-  return withDbOrFile(
-    async () => {
-      const { data, error } = await db()
-        .from("order_notifications")
-        .insert({
-          id: pending.id,
-          order_id: pending.orderId,
-          customer_id: pending.customerId,
-          event_type: eventType,
-          channel,
-          status: "pending",
-          payload: { orderNumber: order.orderNumber },
-        })
-        .select("*")
-        .maybeSingle();
-      if (error && /duplicate|unique/i.test(error.message)) return null;
-      if (error) throw error;
-      return data ? mapRow(data as Record<string, unknown>) : null;
-    },
-    async () => {
-      const store = await readStore();
-      if (
-        store.notifications.some(
-          (row) =>
-            row.orderId === order.id && row.eventType === eventType && row.channel === channel,
-        )
-      ) {
-        return null;
-      }
-      store.notifications.unshift(pending);
-      await writeStore(store.notifications);
-      return pending;
-    },
-  );
+  return withDb(async () => {
+    const { data, error } = await db()
+      .from("order_notifications")
+      .insert({
+        id: pending.id,
+        order_id: pending.orderId,
+        customer_id: pending.customerId,
+        event_type: eventType,
+        channel,
+        status: "pending",
+        payload: { orderNumber: order.orderNumber },
+      })
+      .select("*")
+      .maybeSingle();
+    if (error && /duplicate|unique/i.test(error.message)) return null;
+    if (error) throw error;
+    return data ? mapRow(data as Record<string, unknown>) : null;
+  });
 }
 
 async function markResult(
@@ -149,30 +89,18 @@ async function markResult(
   result: { status: "sent" | "failed"; providerMessageId?: string | null; error?: string | null },
 ) {
   const sentAt = result.status === "sent" ? new Date().toISOString() : null;
-  await withDbOrFile(
-    async () => {
-      const { error } = await db()
-        .from("order_notifications")
-        .update({
-          status: result.status,
-          provider_message_id: result.providerMessageId ?? null,
-          error: result.error ?? null,
-          sent_at: sentAt,
-        })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readStore();
-      const row = store.notifications.find((item) => item.id === id);
-      if (!row) return;
-      row.status = result.status;
-      row.providerMessageId = result.providerMessageId ?? null;
-      row.error = result.error ?? null;
-      row.sentAt = sentAt;
-      await writeStore(store.notifications);
-    },
-  );
+  await withDb(async () => {
+    const { error } = await db()
+      .from("order_notifications")
+      .update({
+        status: result.status,
+        provider_message_id: result.providerMessageId ?? null,
+        error: result.error ?? null,
+        sent_at: sentAt,
+      })
+      .eq("id", id);
+    if (error) throw error;
+  });
 }
 
 async function sendEmail(
@@ -405,16 +333,13 @@ export async function notifyOrderChanges(previous: Order, next: Order) {
 }
 
 export async function listOrderNotifications(orderId: string): Promise<OrderNotification[]> {
-  return withDbOrFile(
-    async () => {
-      const { data, error } = await db()
-        .from("order_notifications")
-        .select("*")
-        .eq("order_id", orderId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
-    },
-    async () => (await readStore()).notifications.filter((row) => row.orderId === orderId),
-  );
+  return withDb(async () => {
+    const { data, error } = await db()
+      .from("order_notifications")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  });
 }

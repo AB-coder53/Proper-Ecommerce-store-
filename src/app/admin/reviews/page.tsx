@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { StarRating } from "@/components/site/StarRating";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { AdminReview } from "@/lib/reviews";
 
 type CatalogProduct = { id: string; name: string; colors: string[]; sizes: string[] };
@@ -127,15 +128,15 @@ export default function AdminReviewsPage() {
         <h2 className="font-display text-xl font-bold sm:col-span-2">Add client review</h2>
         <label className="text-sm">
           Product
-          <select
+          <NativeSelect
             required
             value={productId}
+            wrapperClassName="mt-1"
             onChange={(event) => {
               setProductId(event.target.value);
               setColor("");
               setSize("");
             }}
-            className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
           >
             <option value="">Select a product</option>
             {products.map((product) => (
@@ -143,7 +144,7 @@ export default function AdminReviewsPage() {
                 {product.name}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-sm">
           Client name
@@ -157,25 +158,25 @@ export default function AdminReviewsPage() {
         </label>
         <label className="text-sm">
           Rating
-          <select
+          <NativeSelect
             value={rating}
+            wrapperClassName="mt-1"
             onChange={(event) => setRating(event.target.value)}
-            className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
           >
             {[5, 4, 3, 2, 1].map((value) => (
               <option key={value} value={value}>
                 {value} star{value === 1 ? "" : "s"}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
             Colour
-            <select
+            <NativeSelect
               value={color}
+              wrapperClassName="mt-1"
               onChange={(event) => setColor(event.target.value)}
-              className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
             >
               <option value="">Optional</option>
               {(selected?.colors ?? []).map((value) => (
@@ -183,14 +184,14 @@ export default function AdminReviewsPage() {
                   {value}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-sm">
             Size
-            <select
+            <NativeSelect
               value={size}
+              wrapperClassName="mt-1"
               onChange={(event) => setSize(event.target.value)}
-              className="mt-1 h-11 w-full rounded-xl border border-border bg-background px-3"
             >
               <option value="">Optional</option>
               {(selected?.sizes ?? []).map((value) => (
@@ -198,7 +199,7 @@ export default function AdminReviewsPage() {
                   {value}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
         </div>
         <label className="text-sm sm:col-span-2">
@@ -224,20 +225,20 @@ export default function AdminReviewsPage() {
       </form>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <select
+        <NativeSelect
           value={status}
           onChange={(event) => {
             const next = event.target.value;
             setStatus(next);
             void load(next, query);
           }}
-          className="h-11 rounded-full border border-border bg-background px-4 text-sm"
+          className="w-auto rounded-full px-4"
         >
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
           <option value="all">All</option>
-        </select>
+        </NativeSelect>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}

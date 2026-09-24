@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { DangerButton } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUSES,
@@ -35,16 +36,32 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => void refresh(), POLL_MS);
-    const onFocus = () => {
-      if (document.visibilityState === "visible") void refresh();
+    let timer: number | undefined;
+    const start = () => {
+      if (timer != null) return;
+      timer = window.setInterval(() => {
+        if (document.visibilityState === "visible") void refresh();
+      }, POLL_MS);
     };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
+    const stop = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === "visible") start();
+    window.addEventListener("focus", onVisibility);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
+      stop();
+      window.removeEventListener("focus", onVisibility);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [refresh]);
 
@@ -120,19 +137,19 @@ export function AdminOrdersTable({ initialOrders }: { initialOrders: Order[] }) 
                 {PAYMENT_STATUS_LABELS[order.paymentStatus] ?? order.paymentStatus}
               </td>
               <td className="px-4 py-3">
-                <select
+                <NativeSelect
                   value={order.orderStatus}
                   disabled={busyId === order.id}
                   aria-label={`Update status for order ${order.orderNumber}`}
                   onChange={(event) => void updateStatus(order, event.target.value)}
-                  className="h-11 min-w-[11rem] rounded-full border border-border bg-background px-3"
+                  className="min-w-[11rem] rounded-full"
                 >
                   {[...ORDER_STATUSES, ...EXTRA].map((value) => (
                     <option key={value} value={value}>
                       {ORDER_STATUS_LABELS[value] ?? value}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
                 <div className="mt-2 flex flex-wrap gap-1">
                   {QUICK_STATUSES.map((value) => (
                     <button

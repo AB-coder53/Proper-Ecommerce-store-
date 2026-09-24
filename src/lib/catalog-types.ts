@@ -3,6 +3,21 @@ import { z } from "zod";
 import type { ProductBadge } from "@/lib/promotions";
 import { variantMatrix } from "@/lib/inventory";
 
+export const COLOR_IMAGE_LIMIT = 12;
+export const PRODUCT_IMAGE_LIMIT = 80;
+
+export const colorImagesSchema = z
+  .array(
+    z.object({
+      color: z.string().trim().min(1).max(40),
+      images: z.array(z.string().trim().max(500)).max(COLOR_IMAGE_LIMIT).default([]),
+    }),
+  )
+  .max(20)
+  .default([]);
+
+export type ProductColorImages = z.infer<typeof colorImagesSchema>[number];
+
 export const productSchema = z.object({
   id: z
     .string()
@@ -13,7 +28,8 @@ export const productSchema = z.object({
   name: z.string().trim().min(2).max(120),
   fabric: z.string().trim().min(2).max(120),
   image: z.string().trim().min(1).max(500),
-  images: z.array(z.string().trim().max(500)).max(30).default([]),
+  images: z.array(z.string().trim().max(500)).max(PRODUCT_IMAGE_LIMIT).default([]),
+  colorImages: colorImagesSchema.optional().default([]),
   tagline: z.string().trim().min(2).max(200),
   description: z.string().trim().min(10).max(2000),
   details: z.array(z.string().trim().min(1).max(200)).max(20).default([]),

@@ -1,8 +1,6 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
-import path from "path";
 
 import { getProductById } from "@/lib/catalog.server";
 import { listOrdersForCustomer } from "@/lib/commerce.server";
@@ -21,11 +19,9 @@ import {
   type ReviewStatus,
   type ReviewSummary,
 } from "@/lib/reviews";
-import { isMissingTableError } from "@/lib/store-config.shared";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const DATA_PATH = path.join(process.cwd(), "data", "reviews.json");
 const REVIEWABLE_STATUSES = new Set(["delivered"]);
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT = 5;
@@ -51,54 +47,12 @@ type StoredReview = {
   updatedAt: string;
 };
 
-let useFileStore: boolean | null = null;
-
 function db(): SupabaseClient {
   return getSupabaseWriteClient() as unknown as SupabaseClient;
 }
 
-function canFallback(error: unknown) {
-  const err = error as { message?: string };
-  return (
-    isMissingTableError(error) ||
-    /product_reviews/i.test(err.message ?? "") ||
-    /SUPABASE_SERVICE_ROLE_KEY|Missing Supabase/i.test(err.message ?? "")
-  );
-}
-
-async function withDbOrFile<T>(dbFn: () => Promise<T>, fileFn: () => Promise<T>): Promise<T> {
-  if (useFileStore === true) return fileFn();
-  try {
-    const result = await dbFn();
-    useFileStore = false;
-    return result;
-  } catch (error) {
-    const err = error as { status?: number };
-    if (err.status === 400 || err.status === 401 || err.status === 404 || err.status === 409) {
-      throw error;
-    }
-    if (useFileStore === false && !canFallback(error)) throw error;
-    if (canFallback(error)) {
-      useFileStore = true;
-      return fileFn();
-    }
-    throw error;
-  }
-}
-
-async function readStore(): Promise<{ reviews: StoredReview[] }> {
-  try {
-    const raw = await fs.readFile(DATA_PATH, "utf8");
-    const data = JSON.parse(raw) as { reviews?: StoredReview[] };
-    return { reviews: data.reviews ?? [] };
-  } catch {
-    return { reviews: [] };
-  }
-}
-
-async function writeStore(reviews: StoredReview[]) {
-  await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-  await fs.writeFile(DATA_PATH, `${JSON.stringify({ reviews }, null, 2)}\n`, "utf8");
+function withDb<T>(dbFn: () => Promise<T>): Promise<T> {
+  return dbFn();
 }
 
 function fail(message: string, status: number): never {
@@ -192,24 +146,39 @@ function eligibleOrderItem(orders: Order[], productId: string, existing: StoredR
 }
 
 async function listStored(): Promise<StoredReview[]> {
-  return withDbOrFile(
-    async () => {
-      const { data, error } = await db()
-        .from("product_reviews")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
-    },
-    async () => (await readStore()).reviews,
-  );
+  return withDb(async () => {
+    const { data, error } = await db()
+      .from("product_reviews")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  });
+}
+
+async function listStoredForProduct(productId: string): Promise<StoredReview[]> {
+  return withDb(async () => {
+    const { data, error } = await db()
+      .from("product_reviews")
+      .select("*")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
+  });
 }
 
 export async function getReviewSummary(productId: string): Promise<ReviewSummary> {
-  const reviews = (await listStored()).filter(
-    (row) => row.productId === productId && row.status === "approved" && !row.deletedAt,
-  );
-  const ratings = reviews.map((row) => row.rating);
+  const ratings = await withDb(async () => {
+    const { data, error } = await db()
+      .from("product_reviews")
+      .select("rating")
+      .eq("product_id", productId)
+      .eq("status", "approved")
+      .is("deleted_at", null);
+    if (error) throw error;
+    return (data ?? []).map((row) => Number((row as { rating: number }).rating));
+  });
   return {
     average: averageRating(ratings),
     count: ratings.length,
@@ -222,8 +191,8 @@ export async function listPublicReviews(
   page = 1,
   sort: "newest" | "highest" | "lowest" = "newest",
 ) {
-  const reviews = (await listStored()).filter(
-    (row) => row.productId === productId && row.status === "approved" && !row.deletedAt,
+  const reviews = (await listStoredForProduct(productId)).filter(
+    (row) => row.status === "approved" && !row.deletedAt,
   );
   reviews.sort((a, b) => {
     if (sort === "highest") return b.rating - a.rating || b.createdAt.localeCompare(a.createdAt);
@@ -251,7 +220,10 @@ export async function getReviewEligibility(
   if (!customer) {
     return { authenticated: false, canReview: false, reason: "Please log in to submit a review." };
   }
-  const [orders, existing] = await Promise.all([listOrdersForCustomer(customer.id), listStored()]);
+  const [orders, existing] = await Promise.all([
+    listOrdersForCustomer(customer.id),
+    listStoredForProduct(productId),
+  ]);
   const mine = existing.filter((row) => row.customerId === customer.id);
   const match = eligibleOrderItem(orders, productId, mine);
   if (!match) {
@@ -285,7 +257,10 @@ export async function submitReview(productId: string, customer: CustomerPublic, 
   if (!product) fail("Product not found.", 404);
   enforceRateLimit(customer.id);
 
-  const [orders, existing] = await Promise.all([listOrdersForCustomer(customer.id), listStored()]);
+  const [orders, existing] = await Promise.all([
+    listOrdersForCustomer(customer.id),
+    listStoredForProduct(productId),
+  ]);
   const mine = existing.filter((row) => row.customerId === customer.id);
   const requested = parsed.orderId
     ? (orders.find((order) => order.id === parsed.orderId) ?? null)
@@ -331,46 +306,28 @@ export async function submitReview(productId: string, customer: CustomerPublic, 
     updatedAt: now,
   };
 
-  await withDbOrFile(
-    async () => {
-      const { error } = await db().from("product_reviews").insert({
-        id: review.id,
-        product_id: review.productId,
-        customer_id: review.customerId,
-        order_id: review.orderId,
-        variant_id: review.variantId,
-        color: review.color,
-        size: review.size,
-        rating: review.rating,
-        body: review.body,
-        customer_name: review.customerName,
-        customer_email: review.customerEmail,
-        order_number: review.orderNumber,
-        status: review.status,
-        verified_purchase: true,
-      });
-      if (error && /duplicate|unique/i.test(error.message)) {
-        fail("You have already reviewed this product for that order.", 409);
-      }
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readStore();
-      if (
-        store.reviews.some(
-          (row) =>
-            row.customerId === review.customerId &&
-            row.productId === review.productId &&
-            row.orderId === review.orderId &&
-            !row.deletedAt,
-        )
-      ) {
-        fail("You have already reviewed this product for that order.", 409);
-      }
-      store.reviews.unshift(review);
-      await writeStore(store.reviews);
-    },
-  );
+  await withDb(async () => {
+    const { error } = await db().from("product_reviews").insert({
+      id: review.id,
+      product_id: review.productId,
+      customer_id: review.customerId,
+      order_id: review.orderId,
+      variant_id: review.variantId,
+      color: review.color,
+      size: review.size,
+      rating: review.rating,
+      body: review.body,
+      customer_name: review.customerName,
+      customer_email: review.customerEmail,
+      order_number: review.orderNumber,
+      status: review.status,
+      verified_purchase: true,
+    });
+    if (error && /duplicate|unique/i.test(error.message)) {
+      fail("You have already reviewed this product for that order.", 409);
+    }
+    if (error) throw error;
+  });
 
   return {
     id: review.id,
@@ -412,38 +369,31 @@ export async function createAdminReview(input: unknown) {
     updatedAt: now,
   };
 
-  await withDbOrFile(
-    async () => {
-      const { error } = await db().from("product_reviews").insert({
-        id: review.id,
-        product_id: review.productId,
-        customer_id: null,
-        order_id: null,
-        variant_id: null,
-        color: review.color,
-        size: review.size,
-        rating: review.rating,
-        body: review.body,
-        customer_name: review.customerName,
-        customer_email: null,
-        order_number: null,
-        status: "approved",
-        verified_purchase: false,
-      });
-      if (error && /null value|not-null/i.test(error.message)) {
-        fail(
-          "Client reviews need a database update. Run supabase/migrations/20260923180000_admin_reviews.sql in the Supabase SQL editor.",
-          503,
-        );
-      }
-      if (error) throw error;
-    },
-    async () => {
-      const store = await readStore();
-      store.reviews.unshift(review);
-      await writeStore(store.reviews);
-    },
-  );
+  await withDb(async () => {
+    const { error } = await db().from("product_reviews").insert({
+      id: review.id,
+      product_id: review.productId,
+      customer_id: null,
+      order_id: null,
+      variant_id: null,
+      color: review.color,
+      size: review.size,
+      rating: review.rating,
+      body: review.body,
+      customer_name: review.customerName,
+      customer_email: null,
+      order_number: null,
+      status: "approved",
+      verified_purchase: false,
+    });
+    if (error && /null value|not-null/i.test(error.message)) {
+      fail(
+        "Client reviews need a database update. Run supabase/migrations/20260923180000_admin_reviews.sql in the Supabase SQL editor.",
+        503,
+      );
+    }
+    if (error) throw error;
+  });
 
   return toAdmin(review);
 }
@@ -468,49 +418,29 @@ export async function listAdminReviews(filters?: { status?: string; productId?: 
 
 export async function moderateReview(id: string, status: ReviewStatus) {
   const now = new Date().toISOString();
-  await withDbOrFile(
-    async () => {
-      const { data, error } = await db()
-        .from("product_reviews")
-        .update({ status, updated_at: now })
-        .eq("id", id)
-        .is("deleted_at", null)
-        .select("id")
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) fail("Review not found.", 404);
-    },
-    async () => {
-      const store = await readStore();
-      const review = store.reviews.find((row) => row.id === id && !row.deletedAt);
-      if (!review) fail("Review not found.", 404);
-      review.status = status;
-      review.updatedAt = now;
-      await writeStore(store.reviews);
-    },
-  );
+  await withDb(async () => {
+    const { data, error } = await db()
+      .from("product_reviews")
+      .update({ status, updated_at: now })
+      .eq("id", id)
+      .is("deleted_at", null)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) fail("Review not found.", 404);
+  });
 }
 
 export async function deleteReview(id: string) {
   const now = new Date().toISOString();
-  await withDbOrFile(
-    async () => {
-      const { data, error } = await db()
-        .from("product_reviews")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) fail("Review not found.", 404);
-    },
-    async () => {
-      const store = await readStore();
-      const review = store.reviews.find((row) => row.id === id && !row.deletedAt);
-      if (!review) fail("Review not found.", 404);
-      review.deletedAt = now;
-      review.updatedAt = now;
-      await writeStore(store.reviews);
-    },
-  );
+  await withDb(async () => {
+    const { data, error } = await db()
+      .from("product_reviews")
+      .update({ deleted_at: now, updated_at: now })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) fail("Review not found.", 404);
+  });
 }

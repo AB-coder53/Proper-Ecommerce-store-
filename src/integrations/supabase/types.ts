@@ -15,6 +15,7 @@ export type Database = {
           fabric: string;
           image: string;
           images: string[];
+          color_images: Json;
           tagline: string;
           description: string;
           details: string[];
@@ -34,6 +35,7 @@ export type Database = {
           fabric: string;
           image: string;
           images?: string[];
+          color_images?: Json;
           tagline?: string;
           description?: string;
           details?: string[];
@@ -53,6 +55,7 @@ export type Database = {
           fabric?: string;
           image?: string;
           images?: string[];
+          color_images?: Json;
           tagline?: string;
           description?: string;
           details?: string[];

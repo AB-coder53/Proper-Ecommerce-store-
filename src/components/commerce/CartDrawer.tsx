@@ -10,6 +10,7 @@ import { ColorSwatchRow } from "@/components/site/ColorSwatchRow";
 import { ProductImage } from "@/components/site/ProductImage";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Sheet,
   SheetContent,
@@ -287,21 +288,22 @@ function CartDrawerItem({
           {sizes.length > 1 ? (
             <label className="min-w-0 text-xs text-muted-foreground">
               Size
-              <select
+              <NativeSelect
                 value={line.size}
                 disabled={busy}
+                wrapperClassName="mt-1"
                 aria-label={`Size for ${line.name}`}
                 onChange={(event) =>
                   void run(() => onVariant(line.key, event.target.value, line.color))
                 }
-                className="mt-1 h-11 w-full min-w-0 rounded-full border border-border bg-background px-3 text-sm text-foreground"
+                className="min-w-0 rounded-full text-foreground"
               >
                 {sizes.map((size) => (
                   <option key={size} value={size}>
                     {size}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           ) : (
             <p className="text-xs text-muted-foreground">Size: {line.size}</p>

@@ -517,63 +517,54 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   );
 
   const handleAuthSuccess = useCallback(
-    async (nextCustomer: CustomerPublic) => {
-      setCustomer(nextCustomer);
+    async (payload: { customer: CustomerPublic; cart: CartLine[]; wishlist: WishlistItem[] }) => {
+      setCustomer(payload.customer);
+      setCart(payload.cart);
+      setWishlist(payload.wishlist);
+      writeGuestCart([]);
+      setGuestCart([]);
+      closeAuth();
+
       const intent =
         authIntent ||
         (typeof window !== "undefined"
           ? (JSON.parse(sessionStorage.getItem(AUTH_INTENT_KEY) || "null") as AuthIntent)
           : null);
 
-      const guest = readGuestCart();
-      if (guest.length) {
-        await fetch("/api/customer/cart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "merge", items: guest }),
-        });
-        writeGuestCart([]);
-        setGuestCart([]);
-      }
-
-      await refreshSession();
-
       if (intent?.type === "wishlist") {
-        await fetch("/api/customer/wishlist", {
+        const res = await fetch("/api/customer/wishlist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ productId: intent.productId }),
         });
-        await refreshSession();
+        if (res.ok) {
+          const data = (await res.json()) as { items?: WishlistItem[] };
+          setWishlist(data.items ?? payload.wishlist);
+        }
         toast.success("Added to wishlist");
-        closeAuth();
         router.push("/account/wishlist");
         return;
       }
 
       if (intent?.type === "buy_now") {
         sessionStorage.setItem(BUY_NOW_KEY, JSON.stringify(intent.item));
-        closeAuth();
         router.push(safeInternalPath(intent.redirect, "/checkout?mode=buy_now"));
         return;
       }
 
       if (intent?.type === "checkout") {
-        closeAuth();
         router.push("/checkout");
         return;
       }
 
       if (intent?.type === "generic") {
-        closeAuth();
         router.push(safeInternalPath(intent.redirect, "/"));
         return;
       }
 
-      closeAuth();
       router.push("/");
     },
-    [authIntent, closeAuth, refreshSession, router],
+    [authIntent, closeAuth, router],
   );
 
   const cartCount = customer

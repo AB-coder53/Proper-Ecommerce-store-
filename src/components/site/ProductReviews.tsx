@@ -1,40 +1,43 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { StarRating } from "@/components/site/StarRating";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
-import type { PublicReview, ReviewEligibility, ReviewSummary } from "@/lib/reviews";
+import type { PublicReview, ReviewEligibility, ReviewListing } from "@/lib/reviews";
 import { REVIEW_MAX_LENGTH, REVIEW_MIN_LENGTH } from "@/lib/reviews";
 
-type Payload = {
-  summary: ReviewSummary;
-  reviews: PublicReview[];
-  page: number;
-  totalPages: number;
+type Payload = ReviewListing & {
   eligibility: ReviewEligibility;
+};
+
+const guestEligibility: ReviewEligibility = {
+  authenticated: false,
+  canReview: false,
+  reason: "Please log in to submit a review.",
 };
 
 export function ProductReviews({
   productId,
-  initialSummary,
+  initialListing,
 }: {
   productId: string;
-  initialSummary?: ReviewSummary | undefined;
+  initialListing?: ReviewListing | undefined;
 }) {
   const { customer, openAuth } = useCommerce();
+  const skipInitialFetch = useRef(Boolean(initialListing));
   const [data, setData] = useState<Payload | null>(
-    initialSummary
+    initialListing
       ? {
-          summary: initialSummary,
-          reviews: [],
-          page: 1,
-          totalPages: 1,
-          eligibility: { authenticated: Boolean(customer), canReview: false, reason: "" },
+          ...initialListing,
+          eligibility: customer
+            ? { authenticated: true, canReview: false, reason: "" }
+            : guestEligibility,
         }
       : null,
   );
@@ -46,21 +49,29 @@ export function ProductReviews({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const load = async (nextPage = page, nextSort = sort) => {
-    const res = await fetch(
-      `/api/products/${productId}/reviews?page=${nextPage}&sort=${nextSort}`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return;
-    const payload = (await res.json()) as Payload;
-    setData(payload);
-  };
+  const load = useCallback(
+    async (nextPage: number, nextSort: typeof sort) => {
+      const res = await fetch(
+        `/api/products/${productId}/reviews?page=${nextPage}&sort=${nextSort}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const payload = (await res.json()) as Payload;
+      setData(payload);
+    },
+    [productId],
+  );
 
   useEffect(() => {
+    if (skipInitialFetch.current && page === 1 && sort === "newest" && !customer) {
+      skipInitialFetch.current = false;
+      return;
+    }
+    skipInitialFetch.current = false;
     void load(page, sort);
-  }, [productId, page, sort, customer?.id]);
+  }, [customer, load, page, sort]);
 
-  const summary = data?.summary ?? initialSummary;
+  const summary = data?.summary ?? initialListing?.summary;
   const eligibility = data?.eligibility;
 
   const submit = async (event: FormEvent) => {
@@ -180,21 +191,21 @@ export function ProductReviews({
 
       <div className="mt-8 flex items-center justify-between gap-3">
         <h3 className="font-semibold">Reviews</h3>
-        <select
+        <NativeSelect
           value={sort}
           onChange={(event) => {
             setPage(1);
             setSort(event.target.value as typeof sort);
           }}
-          className="h-11 rounded-full border border-border bg-background px-3 text-sm"
+          className="w-auto rounded-full"
         >
           <option value="newest">Most recent</option>
           <option value="highest">Highest rating</option>
           <option value="lowest">Lowest rating</option>
-        </select>
+        </NativeSelect>
       </div>
       <ul className="mt-4 space-y-4">
-        {(data?.reviews ?? []).map((review) => (
+        {(data?.reviews ?? []).map((review: PublicReview) => (
           <li key={review.id} className="rounded-3xl border border-border p-5">
             <StarRating value={review.rating} size="sm" />
             <p className="mt-3 text-sm leading-relaxed">{review.body}</p>

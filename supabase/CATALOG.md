@@ -1,5 +1,7 @@
 # Supabase catalogue setup
 
+Products, collections, variants, and shipping settings are stored only in Supabase. The storefront and admin read those tables; there is no local JSON catalogue.
+
 1. Open your Supabase project → **SQL Editor**
 2. Paste and run: `supabase/migrations/20260812100000_products_collections.sql`
 3. Add the service role key to `.env`:

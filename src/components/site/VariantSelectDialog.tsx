@@ -41,9 +41,9 @@ export function VariantSelectDialog({
 
   const preview = useMemo(() => {
     if (!color) return product.image;
-    const src = images[colorToImageIndex(color, product.colors, images)] ?? "";
+    const src = images[colorToImageIndex(color, product.colors, images, product.colorImages)] ?? "";
     return src.trim() ? src : product.image;
-  }, [color, images, product.colors, product.image]);
+  }, [color, images, product.colorImages, product.colors, product.image]);
 
   const canAdd = isValidProductVariant(product, color, size);
   const stock = availableStock(product, color, size);

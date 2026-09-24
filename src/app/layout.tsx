@@ -2,10 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 
-import { AppProviders } from "@/components/site/AppProviders";
 import { GoogleAnalytics } from "@/components/site/GoogleAnalytics";
 import { canonicalUrl } from "@/lib/canonical-url";
-import { getCatalog } from "@/lib/catalog.server";
 import { JsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
@@ -65,9 +63,7 @@ export const viewport: Viewport = {
   themeColor: "#111111",
 };
 
-export default async function RootLayout({ children }: { children: ReactNode }) {
-  const catalog = await getCatalog();
-
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${cormorant.variable}`}>
       <head>
@@ -77,7 +73,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         <GoogleAnalytics />
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
-        <AppProviders catalog={catalog}>{children}</AppProviders>
+        {children}
       </body>
     </html>
   );

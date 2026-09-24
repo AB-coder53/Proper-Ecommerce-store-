@@ -18,6 +18,7 @@ const emptyProduct = (): Product => ({
   fabric: "",
   image: "",
   images: [],
+  colorImages: [],
   tagline: "",
   description: "",
   details: [],
@@ -161,10 +162,12 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
       <ProductMediaFields
         colors={initial?.colors ?? []}
         images={initial?.images?.length ? initial.images : initial?.image ? [initial.image] : []}
+        colorImages={initial?.colorImages ?? []}
         onChange={(media) =>
           setForm((prev) => ({
             ...prev,
             colors: media.colors,
+            colorImages: media.colorImages,
             images: media.images,
             image: media.image,
           }))

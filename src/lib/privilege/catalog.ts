@@ -1,6 +1,8 @@
 import type { Product } from "@/lib/catalog-types";
+import { productImageForColor } from "@/lib/cart-display";
 import { applyIstefadaDiscount } from "@/lib/istefada-offer";
 import type { PrivilegeProduct } from "@/lib/privilege/types";
+import { colorToImageIndex } from "@/lib/product-colors";
 import { parsePriceInr } from "@/lib/seo";
 
 function productImages(product: Product) {
@@ -8,11 +10,7 @@ function productImages(product: Product) {
 }
 
 function imageForColor(product: Product, color: string) {
-  const images = productImages(product);
-  const orderIndex = product.colors.indexOf(color);
-  const slot = orderIndex >= 0 ? images[orderIndex]?.trim() : "";
-  if (slot) return slot;
-  return images.find((src) => src.trim()) || product.image;
+  return productImageForColor(product, color);
 }
 
 export function mapCatalogProductToPrivilege(product: Product): PrivilegeProduct | null {
@@ -33,6 +31,7 @@ export function mapCatalogProductToPrivilege(product: Product): PrivilegeProduct
     variant: defaultColor,
     colors: product.colors,
     images: productImages(product),
+    colorImages: product.colorImages,
     price: discountedPrice,
     originalPrice,
     gsm: product.fabric.toUpperCase(),
@@ -54,8 +53,8 @@ export function mapCatalogToPrivilegeProducts(products: Product[]) {
 }
 
 export function privilegeImageForColor(product: PrivilegeProduct, color: string) {
-  const orderIndex = product.colors.indexOf(color);
-  const slot = orderIndex >= 0 ? product.images[orderIndex]?.trim() : "";
-  if (slot) return slot;
-  return product.images.find((src) => src.trim()) || product.image;
+  const src =
+    product.images[colorToImageIndex(color, product.colors, product.images, product.colorImages)] ??
+    "";
+  return src.trim() || product.image;
 }

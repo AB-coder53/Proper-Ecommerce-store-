@@ -7,7 +7,7 @@ import {
   loginCustomer,
   signupCustomer,
 } from "@/lib/customer-auth.server";
-import { mergeGuestCart } from "@/lib/commerce.server";
+import { getCart, getWishlist, mergeGuestCart } from "@/lib/commerce.server";
 import { cartItemInputSchema, loginSchema, signupSchema } from "@/lib/commerce-types";
 import { z } from "zod";
 
@@ -32,11 +32,12 @@ export async function POST(request: Request) {
         ? await loginCustomer(loginSchema.parse(body))
         : await signupCustomer(signupSchema.parse(body));
 
-    if (guestCart?.length) {
-      await mergeGuestCart(customer.id, guestCart);
-    }
+    const [cart, wishlist] = await Promise.all([
+      guestCart?.length ? mergeGuestCart(customer.id, guestCart) : getCart(customer.id),
+      getWishlist(customer.id),
+    ]);
 
-    const response = NextResponse.json({ customer });
+    const response = NextResponse.json({ customer, cart, wishlist });
     attachCustomerSessionCookie(response, customer.id);
     return response;
   } catch (error) {

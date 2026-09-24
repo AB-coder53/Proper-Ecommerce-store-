@@ -5,6 +5,7 @@ export type PrivilegeProduct = {
   variant: string;
   colors: string[];
   images: string[];
+  colorImages?: { color: string; images: string[] }[];
   price: number;
   originalPrice: number;
   gsm: string;

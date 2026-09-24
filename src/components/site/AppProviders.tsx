@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
-import { usePathname } from "next/navigation";
 
 import { CommerceProvider } from "@/components/commerce/CommerceProvider";
 import { CommerceToaster } from "@/components/commerce/CommerceToaster";
@@ -20,21 +19,6 @@ const AnalyticsTracker = dynamic(
 );
 
 export function AppProviders({ children, catalog }: { children: ReactNode; catalog: Catalog }) {
-  const pathname = usePathname();
-  const isAdmin = pathname?.startsWith("/admin");
-  const isCampaignLanding = pathname?.startsWith("/istefada") || pathname?.startsWith("/privilege");
-
-  if (isAdmin) return <>{children}</>;
-
-  if (isCampaignLanding) {
-    return (
-      <>
-        <AnalyticsTracker />
-        {children}
-      </>
-    );
-  }
-
   return (
     <IstefadaOfferProvider>
       <AnalyticsTracker />

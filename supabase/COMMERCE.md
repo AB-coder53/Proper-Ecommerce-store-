@@ -7,7 +7,7 @@
 2. Ensure `SUPABASE_SERVICE_ROLE_KEY` is set in `.env` / Vercel.
 3. Optional: `CUSTOMER_SESSION_SECRET` (falls back to `ADMIN_SESSION_SECRET`).
 
-If Supabase tables are missing, the app falls back to `data/commerce.json` (local only).
+Customers, carts, wishlists, and orders are stored only in Supabase. The app does not use a local JSON store.
 
 ## Customer flows
 

@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 
 import { ImageUploadField } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { Collection, Product } from "@/lib/catalog-types";
 
 const emptyCollection = (): Collection => ({
@@ -83,10 +84,9 @@ export function CollectionForm({
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium">Linked product</label>
-          <select
+          <NativeSelect
             value={form.productId ?? ""}
             onChange={(e) => set("productId", e.target.value)}
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm"
           >
             <option value="">None</option>
             {products.map((p) => (
@@ -94,7 +94,7 @@ export function CollectionForm({
                 {p.name}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium">Tint class</label>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import type { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
@@ -95,7 +96,7 @@ export function clearCustomerSessionCookie(response: NextResponse) {
   });
 }
 
-export async function getCustomerSession(): Promise<CustomerPublic | null> {
+export const getCustomerSession = cache(async (): Promise<CustomerPublic | null> => {
   const jar = await cookies();
   const token = jar.get(CUSTOMER_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -104,7 +105,7 @@ export async function getCustomerSession(): Promise<CustomerPublic | null> {
   const customer = await findCustomerById(decoded.customerId);
   if (!customer || customer.status !== "active") return null;
   return toPublicCustomer(customer);
-}
+});
 
 export async function requireCustomerSession(): Promise<CustomerPublic> {
   const session = await getCustomerSession();

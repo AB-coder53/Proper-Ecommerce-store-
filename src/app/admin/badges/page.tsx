@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import { badgeToneClass, type ProductBadge } from "@/lib/promotions";
 
 const emptyBadge = (): ProductBadge => ({
@@ -109,18 +110,17 @@ export default function AdminBadgesPage() {
         </label>
         <label className="space-y-2 text-sm">
           <span className="font-medium">Tone</span>
-          <select
+          <NativeSelect
             value={form.tone}
             onChange={(event) =>
               setForm((prev) => ({ ...prev, tone: event.target.value as ProductBadge["tone"] }))
             }
-            className="h-11 w-full rounded-xl border border-border px-3"
           >
             <option value="default">Default</option>
             <option value="teal">Teal</option>
             <option value="ink">Ink</option>
             <option value="sale">Sale</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input

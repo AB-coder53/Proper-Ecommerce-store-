@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
 import { couponStatus, type Coupon } from "@/lib/promotions";
 import { formatInr } from "@/lib/price";
 
@@ -108,17 +109,16 @@ export default function AdminCouponsPage() {
         />
         <label className="space-y-2 text-sm">
           <span className="font-medium">Type</span>
-          <select
+          <NativeSelect
             value={form.type}
             onChange={(event) =>
               setForm((prev) => ({ ...prev, type: event.target.value as Coupon["type"] }))
             }
-            className="h-11 w-full rounded-xl border border-border px-3"
           >
             <option value="percent">Percentage off</option>
             <option value="fixed">Fixed amount off</option>
             <option value="per_item_fixed">Fixed amount off each item</option>
-          </select>
+          </NativeSelect>
         </label>
         <Field
           label={form.type === "percent" ? "Percent" : "Amount"}

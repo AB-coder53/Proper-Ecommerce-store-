@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -361,7 +362,7 @@ export default function CheckoutClient() {
           asChild
           className="mt-6 h-11 rounded-full bg-teal px-8 text-xs tracking-[0.12em] text-teal-foreground uppercase"
         >
-          <a href="/collection">Browse Collection</a>
+          <Link href="/collection">Browse Collection</Link>
         </Button>
       </div>
     );

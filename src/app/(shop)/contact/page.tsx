@@ -1,4 +1,4 @@
-import { ContactContent } from "@/app/contact/ContactContent";
+import { ContactContent } from "./ContactContent";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
 export const metadata = buildPageMetadata({

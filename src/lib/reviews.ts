@@ -68,6 +68,14 @@ export type ReviewEligibility = {
   size?: string;
 };
 
+export type ReviewListing = {
+  summary: ReviewSummary;
+  reviews: PublicReview[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
 export function sanitizeReviewText(value: string) {
   const withoutTags = value.replace(/<[^>]*>/g, " ");
   const withoutControls = [...withoutTags]

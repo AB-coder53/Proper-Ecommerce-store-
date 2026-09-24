@@ -36,7 +36,7 @@ export function guestLineKey(item: { productId: string; size: string; color: str
 
 export function productImageForColor(product: Product, color: string) {
   const images = product.images?.length ? product.images : [product.image];
-  const src = images[colorToImageIndex(color, product.colors, images)] ?? "";
+  const src = images[colorToImageIndex(color, product.colors, images, product.colorImages)] ?? "";
   return src.trim() ? src : product.image;
 }
 

@@ -26,6 +26,3 @@ out
 # env
 .env
 .env*.local
-
-# local commerce fallback store (contains password hashes)
-data/commerce.json

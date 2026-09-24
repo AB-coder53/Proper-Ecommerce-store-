@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const catalog = await getCatalog();
   return NextResponse.json(catalog, {
     headers: {
-      "Cache-Control": live ? "no-store" : "public, s-maxage=30, stale-while-revalidate=120",
+      "Cache-Control": live ? "no-store" : "public, s-maxage=60, stale-while-revalidate=120",
     },
   });
 }

@@ -1,4 +1,4 @@
-import { FaqContent } from "@/app/faq/FaqContent";
+import { FaqContent } from "./FaqContent";
 import { FAQS } from "@/lib/site";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata, faqJsonLd } from "@/lib/seo";
 

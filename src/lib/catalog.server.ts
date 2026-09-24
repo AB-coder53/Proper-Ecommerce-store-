@@ -1,14 +1,13 @@
 import "server-only";
 
 import { cache } from "react";
-import { revalidatePath } from "next/cache";
-import { promises as fs } from "fs";
-import path from "path";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 
 import type { Database } from "@/integrations/supabase/types";
 import type { Catalog, Collection, Product } from "@/lib/catalog-types";
 import { attachInventory, syncProductVariants } from "@/lib/inventory.server";
 import { parsePriceInr } from "@/lib/price";
+import { parseColorImages } from "@/lib/product-colors";
 import { attachProductBadges, setProductBadges } from "@/lib/promotions.server";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 
@@ -17,28 +16,23 @@ type CollectionRow = Database["public"]["Tables"]["collections"]["Row"];
 type ProductInsert = Database["public"]["Tables"]["products"]["Insert"];
 type CollectionInsert = Database["public"]["Tables"]["collections"]["Insert"];
 
-const FALLBACK_PATH = path.join(process.cwd(), "data", "catalog.json");
-
-/** "supabase" once tables exist, "json" when tables are missing / unreachable. */
-let catalogSource: "unknown" | "supabase" | "json" = "unknown";
-
-const CATALOG_TTL_MS = 30_000;
-let memoryCatalog: { value: Catalog; expiresAt: number } | null = null;
+const CATALOG_CACHE_TAG = "catalog";
 
 export function invalidateCatalogCache() {
-  memoryCatalog = null;
+  revalidateTag(CATALOG_CACHE_TAG);
   revalidatePath("/", "layout");
   revalidatePath("/collection");
 }
 
 function mapProduct(row: ProductRow): Product {
-  const extra = row as ProductRow & { compare_at_price?: string | null };
+  const extra = row as ProductRow & { compare_at_price?: string | null; color_images?: unknown };
   return {
     id: row.id,
     name: row.name,
     fabric: row.fabric,
     image: row.image,
     images: row.images ?? [],
+    colorImages: parseColorImages(extra.color_images ?? row.color_images),
     tagline: row.tagline,
     description: row.description,
     details: row.details ?? [],
@@ -75,6 +69,7 @@ function toProductInsert(product: Product): ProductInsert {
     fabric: product.fabric,
     image: product.image || images[0] || "",
     images,
+    color_images: product.colorImages ?? [],
     tagline: product.tagline,
     description: product.description,
     details: product.details,
@@ -97,32 +92,6 @@ function toCollectionInsert(collection: Collection): CollectionInsert {
     product_id: collection.productId || null,
     tint: collection.tint,
     sort_order: collection.sortOrder,
-  };
-}
-
-function isMissingTableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
-  const message = "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
-  return (
-    code === "PGRST205" ||
-    code === "42P01" ||
-    message.includes("Could not find the table") ||
-    message.includes("does not exist")
-  );
-}
-
-async function readFallbackCatalog(): Promise<Catalog> {
-  const raw = await fs.readFile(FALLBACK_PATH, "utf8");
-  const data = JSON.parse(raw) as Catalog;
-  const products = [...(data.products ?? [])]
-    .map((product) => ({ ...product, variants: product.variants ?? [] }))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  return {
-    products: await attachProductBadges(await attachInventory(products)),
-    collections: [...(data.collections ?? [])].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title),
-    ),
   };
 }
 
@@ -153,36 +122,16 @@ async function readSupabaseCatalog(): Promise<Catalog> {
 }
 
 async function resolveCatalog(): Promise<Catalog> {
-  if (catalogSource === "json") {
-    return readFallbackCatalog();
-  }
-
-  try {
-    const catalog = await readSupabaseCatalog();
-    catalogSource = "supabase";
-    return catalog;
-  } catch (error) {
-    // Tables not migrated yet — use local JSON quietly (no console.error / overlay noise).
-    if (isMissingTableError(error) || catalogSource !== "supabase") {
-      catalogSource = "json";
-      return readFallbackCatalog();
-    }
-    throw error;
-  }
+  return readSupabaseCatalog();
 }
 
-async function loadCatalog(): Promise<Catalog> {
-  const now = Date.now();
-  if (memoryCatalog && memoryCatalog.expiresAt > now) {
-    return memoryCatalog.value;
-  }
-  const value = await resolveCatalog();
-  memoryCatalog = { value, expiresAt: now + CATALOG_TTL_MS };
-  return value;
-}
+const loadCatalogCached = unstable_cache(resolveCatalog, ["catalog"], {
+  revalidate: 60,
+  tags: [CATALOG_CACHE_TAG],
+});
 
 /** Dedupes catalog reads within a single request (layout + page). */
-export const getCatalog = cache(loadCatalog);
+export const getCatalog = cache(loadCatalogCached);
 
 export async function getProducts(): Promise<Product[]> {
   return (await getCatalog()).products;
@@ -207,12 +156,6 @@ export async function getCollectionById(id: string): Promise<Collection | undefi
 }
 
 export async function saveProduct(product: Product, mode: "create" | "update") {
-  if (catalogSource === "json") {
-    throw new Error(
-      "Supabase products table is not available. Run supabase/migrations/20260812100000_products_collections.sql and set SUPABASE_SERVICE_ROLE_KEY.",
-    );
-  }
-
   const existing = await getProductById(product.id);
   if (mode === "create" && existing) throw new Error("A product with this id already exists");
   if (mode === "update" && !existing) throw new Error("Product not found");
@@ -246,8 +189,14 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
     void _ignored;
     ({ data, error } = await persist(withoutChart));
   }
+  if (error && /color_images/.test(error.message)) {
+    const { color_images: _ignored, ...withoutColorImages } = payload as ProductInsert & {
+      color_images?: unknown;
+    };
+    void _ignored;
+    ({ data, error } = await persist(withoutColorImages));
+  }
   if (error || !data) throw new Error(error?.message ?? "Could not save product");
-  if (mode === "create") catalogSource = "supabase";
   const mapped = mapProduct(data);
   await syncProductVariants({ ...product, id: mapped.id });
   await setProductBadges(mapped.id, product.badgeIds ?? []);
@@ -258,12 +207,6 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
 }
 
 export async function deleteProduct(id: string) {
-  if (catalogSource === "json") {
-    throw new Error(
-      "Supabase products table is not available. Run the catalogue migration and set SUPABASE_SERVICE_ROLE_KEY.",
-    );
-  }
-
   const existing = await getProductById(id);
   if (!existing) throw new Error("Product not found");
 
@@ -276,12 +219,6 @@ export async function deleteProduct(id: string) {
 }
 
 export async function saveCollection(collection: Collection, mode: "create" | "update") {
-  if (catalogSource === "json") {
-    throw new Error(
-      "Supabase collections table is not available. Run the catalogue migration and set SUPABASE_SERVICE_ROLE_KEY.",
-    );
-  }
-
   const existing = await getCollectionById(collection.id);
   if (mode === "create" && existing) throw new Error("A collection with this id already exists");
   if (mode === "update" && !existing) throw new Error("Collection not found");
@@ -297,7 +234,6 @@ export async function saveCollection(collection: Collection, mode: "create" | "u
   if (mode === "create") {
     const { data, error } = await supabase.from("collections").insert(payload).select("*").single();
     if (error) throw new Error(error.message);
-    catalogSource = "supabase";
     invalidateCatalogCache();
     return mapCollection(data);
   }
@@ -315,12 +251,6 @@ export async function saveCollection(collection: Collection, mode: "create" | "u
 }
 
 export async function deleteCollection(id: string) {
-  if (catalogSource === "json") {
-    throw new Error(
-      "Supabase collections table is not available. Run the catalogue migration and set SUPABASE_SERVICE_ROLE_KEY.",
-    );
-  }
-
   const existing = await getCollectionById(id);
   if (!existing) throw new Error("Collection not found");
 

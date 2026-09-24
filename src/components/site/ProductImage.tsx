@@ -8,6 +8,15 @@ function isLocalSrc(src: string) {
   return src.startsWith("/") && !src.startsWith("//");
 }
 
+function isOptimizableRemote(src: string) {
+  try {
+    const host = new URL(src).hostname;
+    return host.endsWith(".supabase.co") || host.endsWith(".supabase.in");
+  } catch {
+    return false;
+  }
+}
+
 export function ProductImage({
   src,
   alt,
@@ -26,7 +35,7 @@ export function ProductImage({
   priority?: boolean;
 }) {
   const safe = src || "/favicon.png";
-  if (!isLocalSrc(safe)) {
+  if (!isLocalSrc(safe) && !isOptimizableRemote(safe)) {
     return (
       <img
         src={safe}

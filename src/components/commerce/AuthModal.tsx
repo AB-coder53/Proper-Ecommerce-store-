@@ -14,7 +14,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
-import type { CartItemInput, CustomerPublic } from "@/lib/commerce-types";
+import type { CartItemInput, CartLine, CustomerPublic, WishlistItem } from "@/lib/commerce-types";
+
+export type AuthSuccessPayload = {
+  customer: CustomerPublic;
+  cart: CartLine[];
+  wishlist: WishlistItem[];
+};
 
 export function AuthModal({
   open,
@@ -24,7 +30,7 @@ export function AuthModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (customer: CustomerPublic) => void | Promise<void>;
+  onSuccess: (payload: AuthSuccessPayload) => void | Promise<void>;
   guestCart: CartItemInput[];
 }) {
   const [mode, setMode] = useState<"login" | "signup">("signup");
@@ -53,13 +59,18 @@ export function AuthModal({
           guestCart,
         }),
       });
-      const data = await readJsonBody<{ customer?: CustomerPublic; error?: string }>(res);
+      const data = await readJsonBody<AuthSuccessPayload & { error?: string }>(res);
       if (!res.ok || !data.customer) {
         setError(apiErrorMessage(data, "Authentication failed."));
         return;
       }
-      await onSuccess(data.customer);
       setPassword("");
+      onOpenChange(false);
+      void onSuccess({
+        customer: data.customer,
+        cart: data.cart ?? [],
+        wishlist: data.wishlist ?? [],
+      });
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

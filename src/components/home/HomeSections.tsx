@@ -68,7 +68,7 @@ export function HomeHero({ products }: { products: Product[] }) {
                 style={{ animationDelay: `${260 + index * 80}ms` }}
               >
                 <div
-                  className="overflow-hidden rounded-xl bg-white shadow-[0_14px_32px_rgba(0,0,0,0.12)] transition-transform duration-500 [transform:rotate(calc(var(--tilt)*0.4))] hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.4))] sm:rounded-2xl sm:shadow-[0_18px_40px_rgba(0,0,0,0.12)] sm:[transform:rotate(calc(var(--tilt)*0.75))] sm:hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.75))]"
+                  className="overflow-hidden rounded-xl bg-[#f5f5f5] shadow-[0_14px_32px_rgba(0,0,0,0.12)] transition-transform duration-500 [transform:rotate(calc(var(--tilt)*0.4))] hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.4))] sm:rounded-2xl sm:shadow-[0_18px_40px_rgba(0,0,0,0.12)] sm:[transform:rotate(calc(var(--tilt)*0.75))] sm:hover:[transform:translateY(-0.5rem)_rotate(calc(var(--tilt)*0.75))]"
                   style={{ ["--tilt" as string]: `${tilt}deg` }}
                 >
                   <ProductImage
@@ -78,7 +78,7 @@ export function HomeHero({ products }: { products: Product[] }) {
                     height={720}
                     sizes="(max-width: 640px) 22vw, 224px"
                     priority={index < 3}
-                    className="aspect-[2/3] h-auto w-full object-contain object-center"
+                    className="block aspect-[2/3] h-auto w-full scale-[1.06] object-cover object-top"
                   />
                 </div>
               </div>
