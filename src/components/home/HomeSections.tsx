@@ -8,13 +8,14 @@ import { ProductImage } from "@/components/site/ProductImage";
 import { Reveal } from "@/components/Reveal";
 import { Button } from "@/components/ui/button";
 import type { Collection, Product } from "@/lib/catalog-types";
+import { catalogImageUrl } from "@/lib/media";
 
 const FAN_FALLBACK = [
-  "/images/oversized-lavender.png",
-  "/images/regular-white.webp",
-  "/images/terry-beige.png",
-  "/images/sun-faded-green.png",
-  "/images/lava-black.png",
+  catalogImageUrl("oversized-lavender.png"),
+  catalogImageUrl("regular-white.webp"),
+  catalogImageUrl("terry-beige.png"),
+  catalogImageUrl("sun-faded-green.png"),
+  catalogImageUrl("lava-black.png"),
 ];
 
 export function HomeHero({ products }: { products: Product[] }) {

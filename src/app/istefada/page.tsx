@@ -1,4 +1,5 @@
 import { PrivilegeLanding } from "@/components/privilege/PrivilegeLanding";
+import { catalogImageUrl } from "@/lib/media";
 import { buildPageMetadata } from "@/lib/seo";
 
 export const metadata = buildPageMetadata({
@@ -6,7 +7,7 @@ export const metadata = buildPageMetadata({
   description:
     "Unlock your exclusive ₹100 AB Collection privilege grant. Visit the main store to shop with automatic savings at checkout.",
   path: "/istefada",
-  image: "/images/hero-beige.png",
+  image: catalogImageUrl("hero-beige.png"),
 });
 
 export default function IstefadaPage() {

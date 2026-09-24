@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import type { Product } from "@/lib/catalog-types";
+import { catalogImageUrl } from "@/lib/media";
 import { SITE_EMAIL, SITE_LOCALE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 type PageSeoInput = {
@@ -27,7 +28,7 @@ export function buildPageMetadata({
   title,
   description,
   path = "/",
-  image = "/images/hero-beige.png",
+  image = catalogImageUrl("hero-beige.png"),
   type = "website",
   noIndex = false,
 }: PageSeoInput): Metadata {

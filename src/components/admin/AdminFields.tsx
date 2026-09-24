@@ -129,7 +129,7 @@ export function ImageUploadField({
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="/images/product.png or upload"
+          placeholder="Upload or paste a public image URL"
           className="h-11 flex-1 rounded-xl border border-border bg-white px-3 text-sm"
         />
         <label className="inline-flex cursor-pointer">

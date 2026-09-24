@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Quote } from "lucide-react";
 
 import { Reveal } from "@/components/Reveal";
+import { catalogImageUrl } from "@/lib/media";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
 export const metadata = buildPageMetadata({
@@ -9,7 +10,7 @@ export const metadata = buildPageMetadata({
   description:
     "AB Collection is a premium everyday essentials brand for men — heavyweight cotton, honest pricing, and timeless design. Founded by Abbas Badwahwala.",
   path: "/about",
-  image: "/images/fabric.jpg",
+  image: catalogImageUrl("fabric.jpg"),
 });
 
 export default function AboutPage() {
@@ -39,7 +40,7 @@ export default function AboutPage() {
       <section className="px-5 py-10 sm:px-8">
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
           <img
-            src="/images/fabric.jpg"
+            src={catalogImageUrl("fabric.jpg")}
             alt="Close-up of heavyweight AB Collection cotton fabric"
             width={1408}
             height={1008}

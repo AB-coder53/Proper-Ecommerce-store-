@@ -7,6 +7,7 @@ import type { Database } from "@/integrations/supabase/types";
 import type { Catalog, Collection, Product } from "@/lib/catalog-types";
 import { attachInventory, syncProductVariants } from "@/lib/inventory.server";
 import { parsePriceInr } from "@/lib/price";
+import { resolveMediaUrl, resolveMediaUrls } from "@/lib/media";
 import { parseColorImages } from "@/lib/product-colors";
 import { attachProductBadges, setProductBadges } from "@/lib/promotions.server";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
@@ -30,9 +31,12 @@ function mapProduct(row: ProductRow): Product {
     id: row.id,
     name: row.name,
     fabric: row.fabric,
-    image: row.image,
-    images: row.images ?? [],
-    colorImages: parseColorImages(extra.color_images ?? row.color_images),
+    image: resolveMediaUrl(row.image),
+    images: resolveMediaUrls(row.images),
+    colorImages: parseColorImages(extra.color_images ?? row.color_images).map((entry) => ({
+      ...entry,
+      images: resolveMediaUrls(entry.images),
+    })),
     tagline: row.tagline,
     description: row.description,
     details: row.details ?? [],
@@ -54,7 +58,7 @@ function mapCollection(row: CollectionRow): Collection {
   return {
     id: row.id,
     title: row.title,
-    image: row.image,
+    image: resolveMediaUrl(row.image),
     productId: row.product_id ?? "",
     tint: row.tint,
     sortOrder: row.sort_order,

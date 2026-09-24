@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/site/ProductCard";
 import { Reveal } from "@/components/Reveal";
 import { getProducts } from "@/lib/catalog.server";
+import { catalogImageUrl } from "@/lib/media";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
 export const revalidate = 60;
@@ -12,7 +13,7 @@ export const metadata = buildPageMetadata({
   description:
     "Browse AB Collection's first drop: oversized tees, regular fit, French terry, sun-faded and acid-wash styles in heavyweight cotton.",
   path: "/collection",
-  image: "/images/oversized-lavender.png",
+  image: catalogImageUrl("oversized-lavender.png"),
 });
 
 export default async function CollectionPage() {
