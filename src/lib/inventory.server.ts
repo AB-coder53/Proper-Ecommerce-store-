@@ -79,9 +79,11 @@ export async function attachInventory(products: Product[]): Promise<Product[]> {
       }
     }
     const variants = (byProduct.get(product.id) ?? product.variants ?? []).flatMap((row) => {
-      const match = canonical.get(row.sku) ??
+      const match =
+        canonical.get(row.sku) ??
         [...canonical.entries()].find(
-          ([, value]) => colorSizeKey(value.color, value.size) === colorSizeKey(row.color, row.size),
+          ([, value]) =>
+            colorSizeKey(value.color, value.size) === colorSizeKey(row.color, row.size),
         )?.[1];
       if (!match) return [];
       return [{ ...row, color: match.color, size: match.size }];
@@ -125,7 +127,9 @@ export async function syncProductVariants(product: Product) {
     for (const next of wanted) {
       const found =
         current.find((row) => row.sku === next.sku) ??
-        current.find((row) => colorSizeKey(row.color, row.size) === colorSizeKey(next.color, next.size));
+        current.find(
+          (row) => colorSizeKey(row.color, row.size) === colorSizeKey(next.color, next.size),
+        );
       if (found) {
         if (found.color !== next.color || found.size !== next.size || found.sku !== next.sku) {
           const { error: renameError } = await sb

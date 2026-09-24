@@ -173,7 +173,11 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   const supabase = getSupabaseWriteClient();
   const persist = async (body: Record<string, unknown>) => {
     if (mode === "create") {
-      return supabase.from("products").insert(body as ProductInsert).select("*").single();
+      return supabase
+        .from("products")
+        .insert(body as ProductInsert)
+        .select("*")
+        .single();
     }
     return supabase
       .from("products")
