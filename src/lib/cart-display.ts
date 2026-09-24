@@ -36,7 +36,8 @@ export function guestLineKey(item: { productId: string; size: string; color: str
 
 export function productImageForColor(product: Product, color: string) {
   const images = product.images?.length ? product.images : [product.image];
-  return images[colorToImageIndex(color, product.colors, images)] ?? product.image;
+  const src = images[colorToImageIndex(color, product.colors, images)] ?? "";
+  return src.trim() ? src : product.image;
 }
 
 export function displayLineFromInput(item: CartItemInput, products: Product[]): DisplayCartLine {

@@ -11,7 +11,28 @@ const COLOR_SWATCH: Record<string, string> = {
   "light grey": "bg-neutral-300",
   "light gray": "bg-neutral-300",
   "olive green": "bg-[#556b2f]",
+  olive: "bg-[#556b2f]",
   green: "bg-[#4a7c59]",
+  navy: "bg-[#1e3a5f]",
+  blue: "bg-[#3b6ea5]",
+  "light blue": "bg-[#9ec5e8]",
+  red: "bg-[#b23a3a]",
+  pink: "bg-[#e7b7c6]",
+  yellow: "bg-[#e2c15a]",
+  mustard: "bg-[#c4a035]",
+  orange: "bg-[#d9762c]",
+  purple: "bg-[#6d4c8d]",
+  cream: "bg-[#f3ead7]",
+  ivory: "bg-[#f7f1e3]",
+  charcoal: "bg-[#3a3a3a]",
+  khaki: "bg-[#c3b091]",
+  sand: "bg-[#d8c3a5]",
+  rust: "bg-[#a24c2d]",
+  burgundy: "bg-[#6e2430]",
+  camel: "bg-[#c19a6b]",
+  tan: "bg-[#c4a484]",
+  teal: "bg-[#3d7a74]",
+  gold: "bg-[#c4a35a]",
 };
 
 export function colorSwatchClass(color: string) {
@@ -37,12 +58,49 @@ function scoreImageForColor(file: string, color: string) {
   return score;
 }
 
+/** Gallery indices that still have a photo. */
+export function visibleImageIndexes(images: string[]) {
+  return images.flatMap((src, index) => (src.trim() ? [index] : []));
+}
+
+/** Pair each colour with its photo. Extra shots stay in `extras`. */
+export function splitProductMedia(colors: string[], images: string[]) {
+  const used = new Set<number>();
+  const rows = colors.map((name) => ({ name, image: "" }));
+
+  for (const row of rows) {
+    const match = images
+      .map((src, index) => ({
+        index,
+        src,
+        score: src.trim() ? scoreImageForColor(src.toLowerCase(), row.name) : 0,
+      }))
+      .filter((entry) => entry.score > 0 && !used.has(entry.index))
+      .sort((a, b) => b.score - a.score || a.index - b.index)[0];
+    if (!match) continue;
+    used.add(match.index);
+    row.image = match.src;
+  }
+
+  rows.forEach((row, index) => {
+    const src = images[index]?.trim() ?? "";
+    if (row.image || !src || used.has(index)) return;
+    used.add(index);
+    row.image = src;
+  });
+
+  return {
+    rows,
+    extras: images.flatMap((src, index) => (src.trim() && !used.has(index) ? [src] : [])),
+  };
+}
+
 /** All gallery indices that belong to a colour label. */
 export function getImageIndicesForColor(color: string, colors: string[], images: string[]) {
   const scored = images
     .map((src, index) => ({
       index,
-      score: scoreImageForColor(src.toLowerCase(), color),
+      score: src.trim() ? scoreImageForColor(src.toLowerCase(), color) : 0,
     }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index);
@@ -52,11 +110,12 @@ export function getImageIndicesForColor(color: string, colors: string[], images:
   }
 
   const orderIndex = colors.indexOf(color);
-  if (orderIndex >= 0 && orderIndex < images.length) {
+  if (orderIndex >= 0 && images[orderIndex]?.trim()) {
     return [orderIndex];
   }
 
-  return [0];
+  const fallback = images.findIndex((src) => src.trim());
+  return [fallback >= 0 ? fallback : 0];
 }
 
 /** Primary gallery image for a colour swatch. */

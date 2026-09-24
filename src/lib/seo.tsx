@@ -111,7 +111,9 @@ export function productJsonLd(
     "@type": "Product",
     name: product.name,
     description: product.description,
-    image: (product.images ?? [product.image]).map((src) => absoluteUrl(src)),
+    image: (product.images ?? [product.image])
+      .filter((src) => src.trim())
+      .map((src) => absoluteUrl(src)),
     brand: { "@type": "Brand", name: SITE_NAME },
     category: "Men's T-Shirts",
     material: product.fabric,

@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 
-import { ImageUploadField, ListField, SizeChartField } from "@/components/admin/AdminFields";
+import { ListField, SizeChartField } from "@/components/admin/AdminFields";
+import { ProductMediaFields } from "@/components/admin/ProductMediaFields";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/lib/catalog-types";
 import { SIZES } from "@/lib/catalog-types";
@@ -69,13 +70,15 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
       const payload: Product = {
         ...form,
         images: form.images.length ? form.images : form.image ? [form.image] : [],
-        image: form.image || form.images[0] || "",
+        image: form.image || form.images.find((src) => src.trim()) || "",
         badge: form.badge || "",
         badgeIds: form.badgeIds ?? [],
         compareAtPrice: form.compareAtPrice || "",
         sizeChart: form.sizeChart || "",
         variants: variantMatrix(form),
       };
+      if (!payload.colors.length) throw new Error("Add at least one colour.");
+      if (!payload.image.trim()) throw new Error("Upload a product photo.");
       const res = await fetch(
         mode === "create" ? "/api/admin/products" : `/api/admin/products/${form.id}`,
         {
@@ -155,15 +158,19 @@ export function ProductForm({ mode, initial }: { mode: "create" | "edit"; initia
         />
       </div>
 
-      <ImageUploadField label="Main image" value={form.image} onChange={(v) => set("image", v)} />
-      <ListField
-        label="Gallery images (URLs)"
-        value={form.images}
-        onChange={(v) => set("images", v)}
-        placeholder="/images/one.png"
+      <ProductMediaFields
+        colors={initial?.colors ?? []}
+        images={initial?.images?.length ? initial.images : initial?.image ? [initial.image] : []}
+        onChange={(media) =>
+          setForm((prev) => ({
+            ...prev,
+            colors: media.colors,
+            images: media.images,
+            image: media.image,
+          }))
+        }
       />
       <ListField label="Details" value={form.details} onChange={(v) => set("details", v)} />
-      <ListField label="Colors" value={form.colors} onChange={(v) => set("colors", v)} />
       <ListField label="Sizes" value={form.sizes} onChange={(v) => set("sizes", v)} />
       {badges.length ? (
         <div className="space-y-2">

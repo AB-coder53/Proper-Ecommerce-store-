@@ -5,7 +5,7 @@ import { Loader2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-async function uploadAdminImage(file: File): Promise<string> {
+export async function uploadAdminImage(file: File): Promise<string> {
   const body = new FormData();
   body.append("file", file);
   const res = await fetch("/api/admin/upload", { method: "POST", body });

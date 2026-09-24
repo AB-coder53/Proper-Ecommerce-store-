@@ -25,7 +25,7 @@ import {
   quantityCap,
   variantHasStock,
 } from "@/lib/inventory";
-import { colorToImageIndex, indexToColor } from "@/lib/product-colors";
+import { colorToImageIndex, indexToColor, visibleImageIndexes } from "@/lib/product-colors";
 import { isValidProductVariant } from "@/lib/product-variants";
 import type { ReviewSummary } from "@/lib/reviews";
 import type { DeliveryEstimate } from "@/lib/shipping";
@@ -45,6 +45,7 @@ export function ProductDetail({
 }) {
   const liveProduct = useProductInventory(product);
   const images = liveProduct.images?.length ? liveProduct.images : [liveProduct.image];
+  const visibleIndexes = visibleImageIndexes(images);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(product.colors[0] ?? "");
   const [selectedSize, setSelectedSize] = useState(product.sizes[0] ?? "M");
@@ -81,11 +82,17 @@ export function ProductDetail({
   };
 
   const go = (dir: number) => {
-    const next = (selectedImageIndex + dir + images.length) % images.length;
-    selectImageIndex(next);
+    if (!visibleIndexes.length) return;
+    const position = visibleIndexes.indexOf(selectedImageIndex);
+    const start = position >= 0 ? position : 0;
+    const next =
+      visibleIndexes[(start + dir + visibleIndexes.length) % visibleIndexes.length] ??
+      visibleIndexes[0];
+    if (next != null) selectImageIndex(next);
   };
 
-  const activeImage = images[selectedImageIndex] ?? liveProduct.image;
+  const activeImage =
+    images[selectedImageIndex]?.trim() || images.find((src) => src.trim()) || liveProduct.image;
   const selected = {
     productId: liveProduct.id,
     size: selectedSize,
@@ -107,7 +114,7 @@ export function ProductDetail({
             priority
             className="aspect-[4/5] w-full object-cover object-top transition-opacity duration-300"
           />
-          {images.length > 1 ? (
+          {visibleIndexes.length > 1 ? (
             <>
               <button
                 type="button"
@@ -128,9 +135,10 @@ export function ProductDetail({
             </>
           ) : null}
         </div>
-        {images.length > 1 ? (
+        {visibleIndexes.length > 1 ? (
           <div className="mt-4 grid grid-cols-4 gap-3">
-            {images.map((src, i) => {
+            {visibleIndexes.map((i) => {
+              const src = images[i] ?? "";
               const thumbColor = indexToColor(i, product.colors, images);
               const selectedThumb = i === selectedImageIndex;
               return (

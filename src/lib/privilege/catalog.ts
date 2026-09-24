@@ -10,10 +10,9 @@ function productImages(product: Product) {
 function imageForColor(product: Product, color: string) {
   const images = productImages(product);
   const orderIndex = product.colors.indexOf(color);
-  if (orderIndex >= 0 && orderIndex < images.length) {
-    return images[orderIndex] ?? product.image;
-  }
-  return product.image;
+  const slot = orderIndex >= 0 ? images[orderIndex]?.trim() : "";
+  if (slot) return slot;
+  return images.find((src) => src.trim()) || product.image;
 }
 
 export function mapCatalogProductToPrivilege(product: Product): PrivilegeProduct | null {
@@ -56,8 +55,7 @@ export function mapCatalogToPrivilegeProducts(products: Product[]) {
 
 export function privilegeImageForColor(product: PrivilegeProduct, color: string) {
   const orderIndex = product.colors.indexOf(color);
-  if (orderIndex >= 0 && orderIndex < product.images.length) {
-    return product.images[orderIndex] ?? product.image;
-  }
-  return product.image;
+  const slot = orderIndex >= 0 ? product.images[orderIndex]?.trim() : "";
+  if (slot) return slot;
+  return product.images.find((src) => src.trim()) || product.image;
 }
