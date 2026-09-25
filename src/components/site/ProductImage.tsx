@@ -17,14 +17,17 @@ function isOptimizableRemote(src: string) {
   }
 }
 
+export const PRODUCT_IMAGE_QUALITY = 95;
+
 export function ProductImage({
   src,
   alt,
-  width = 800,
-  height = 1000,
+  width = 1200,
+  height = 1500,
   className,
-  sizes = "(max-width: 430px) 100vw, (max-width: 1024px) 50vw, 33vw",
+  sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
   priority = false,
+  quality = PRODUCT_IMAGE_QUALITY,
 }: {
   src: string;
   alt: string;
@@ -33,6 +36,7 @@ export function ProductImage({
   className?: string;
   sizes?: string;
   priority?: boolean;
+  quality?: number;
 }) {
   const safe = src || "/favicon.png";
   if (!isLocalSrc(safe) && !isOptimizableRemote(safe)) {
@@ -56,6 +60,7 @@ export function ProductImage({
       width={width}
       height={height}
       sizes={sizes}
+      quality={quality}
       className={cn(className)}
       priority={priority}
     />

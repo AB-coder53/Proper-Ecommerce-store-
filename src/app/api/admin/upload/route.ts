@@ -7,7 +7,7 @@ import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 export const dynamic = "force-dynamic";
 
 const BUCKET = "product-images";
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 12 * 1024 * 1024;
 
 const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -51,12 +51,16 @@ function sniffMime(bytes: Uint8Array) {
 async function storageClient() {
   const sb = getSupabaseWriteClient();
   const existing = await sb.storage.getBucket(BUCKET);
-  if (existing.data) return sb;
-  const created = await sb.storage.createBucket(BUCKET, {
+  const options = {
     public: true,
     fileSizeLimit: MAX_BYTES,
     allowedMimeTypes: Object.keys(MIME_EXT),
-  });
+  };
+  if (existing.data) {
+    await sb.storage.updateBucket(BUCKET, options);
+    return sb;
+  }
+  const created = await sb.storage.createBucket(BUCKET, options);
   if (created.error && !/already exists/i.test(created.error.message)) {
     throw created.error;
   }
@@ -72,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
     if (file.size > MAX_BYTES) {
-      return NextResponse.json({ error: "File must be under 4MB." }, { status: 400 });
+      return NextResponse.json({ error: "File must be under 12MB." }, { status: 400 });
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());

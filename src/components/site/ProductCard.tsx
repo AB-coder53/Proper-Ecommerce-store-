@@ -52,8 +52,8 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
         <ProductImage
           src={previewImage}
           alt={`${product.name} — ${previewColor || product.fabric}`}
-          width={800}
-          height={1000}
+          width={1200}
+          height={1500}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
         />

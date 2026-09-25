@@ -73,9 +73,9 @@ export function VariantSelectDialog({
           <ProductImage
             src={preview}
             alt={product.name}
-            width={512}
-            height={640}
-            sizes="(max-width: 430px) 80vw, 256px"
+            width={900}
+            height={1125}
+            sizes="(max-width: 640px) 80vw, 400px"
             className="mx-auto aspect-[4/5] w-full max-w-[16rem] rounded-2xl object-cover object-top"
           />
           <div className="mt-4">

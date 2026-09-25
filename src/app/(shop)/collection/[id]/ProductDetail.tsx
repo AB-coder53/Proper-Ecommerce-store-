@@ -111,9 +111,9 @@ export function ProductDetail({
             key={`${selectedImageIndex}-${activeImage}`}
             src={activeImage}
             alt={`${product.name} — ${selectedColor || product.fabric}`}
-            width={1120}
-            height={1400}
-            sizes="(max-width: 1024px) 100vw, 50vw"
+            width={1800}
+            height={2250}
+            sizes="(max-width: 1024px) 100vw, 56vw"
             priority={heroPrioritySrc.current === activeImage}
             className="aspect-[4/5] w-full object-cover object-top transition-opacity duration-300"
           />
@@ -166,9 +166,9 @@ export function ProductDetail({
                   <ProductImage
                     src={src}
                     alt={`${product.name} ${thumbColor}`}
-                    width={240}
-                    height={240}
-                    sizes="25vw"
+                    width={480}
+                    height={480}
+                    sizes="(max-width: 1024px) 22vw, 160px"
                     className="aspect-square w-full object-cover object-top"
                   />
                 </button>
