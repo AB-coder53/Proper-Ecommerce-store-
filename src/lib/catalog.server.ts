@@ -7,8 +7,9 @@ import type { Database } from "@/integrations/supabase/types";
 import type { Catalog, Collection, Product } from "@/lib/catalog-types";
 import { attachInventory, syncProductVariants } from "@/lib/inventory.server";
 import { parsePriceInr } from "@/lib/price";
+import { attachStoredColorImages, writeStoredColorImages } from "@/lib/color-images.server";
 import { resolveMediaUrl, resolveMediaUrls } from "@/lib/media";
-import { parseColorImages } from "@/lib/product-colors";
+import { parseColorImages, resolveColorImages } from "@/lib/product-colors";
 import { attachProductBadges, setProductBadges } from "@/lib/promotions.server";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 
@@ -116,7 +117,7 @@ async function readSupabaseCatalog(): Promise<Catalog> {
   if (collectionsRes.error) throw collectionsRes.error;
 
   const catalog = {
-    products: (productsRes.data ?? []).map(mapProduct),
+    products: await attachStoredColorImages((productsRes.data ?? []).map(mapProduct)),
     collections: (collectionsRes.data ?? []).map(mapCollection),
   };
   return {
@@ -199,12 +200,18 @@ export async function saveProduct(product: Product, mode: "create" | "update") {
   }
   if (error || !data) throw new Error(error?.message ?? "Could not save product");
   const mapped = mapProduct(data);
+  const colorImages = resolveColorImages(
+    product.colors,
+    product.images,
+    product.colorImages ?? mapped.colorImages,
+  );
+  await writeStoredColorImages(mapped.id, colorImages);
   await syncProductVariants({ ...product, id: mapped.id });
   await setProductBadges(mapped.id, product.badgeIds ?? []);
   invalidateCatalogCache();
   revalidatePath(`/collection/${product.id}`);
-  const withStock = await attachProductBadges(await attachInventory([mapped]));
-  return withStock[0] ?? mapped;
+  const withStock = await attachProductBadges(await attachInventory([{ ...mapped, colorImages }]));
+  return withStock[0] ?? { ...mapped, colorImages };
 }
 
 export async function deleteProduct(id: string) {

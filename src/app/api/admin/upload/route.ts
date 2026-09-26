@@ -54,7 +54,7 @@ async function storageClient() {
   const options = {
     public: true,
     fileSizeLimit: MAX_BYTES,
-    allowedMimeTypes: Object.keys(MIME_EXT),
+    allowedMimeTypes: [...Object.keys(MIME_EXT), "application/json"],
   };
   if (existing.data) {
     await sb.storage.updateBucket(BUCKET, options);

@@ -166,16 +166,48 @@ export function visibleImageIndexes(images: string[]) {
 
 export type ProductMediaRow = { name: string; images: string[] };
 
+/** When colour mapping is missing, recover grouped uploads (2 photos per colour, etc.). */
+export function inferColorImagesFromGallery(
+  colors: string[],
+  images: string[],
+): ProductColorImages[] {
+  const photos = images.map((src) => src.trim()).filter(Boolean);
+  const names = colors.map((color) => color.trim()).filter(Boolean);
+  if (!names.length || photos.length < names.length) return [];
+  if (photos.length % names.length !== 0) return [];
+  const perColor = photos.length / names.length;
+  if (perColor < 1 || perColor > 12) return [];
+  return names.map((color, index) => ({
+    color,
+    images: photos.slice(index * perColor, (index + 1) * perColor),
+  }));
+}
+
+export function resolveColorImages(
+  colors: string[],
+  images: string[],
+  colorImages?: ProductColorImages[],
+) {
+  if (colorImages?.some((entry) => entry.images.some((src) => src.trim()))) {
+    return colorImages.map((entry) => ({
+      color: entry.color,
+      images: entry.images.map((src) => src.trim()).filter(Boolean),
+    }));
+  }
+  return inferColorImagesFromGallery(colors, images);
+}
+
 /** Pair each colour with its photos. Extra shots stay in `extras`. */
 export function splitProductMedia(
   colors: string[],
   images: string[],
   colorImages?: ProductColorImages[],
 ): { rows: ProductMediaRow[]; extras: string[] } {
-  if (colorImages?.length) {
+  const resolved = resolveColorImages(colors, images, colorImages);
+  if (resolved.length) {
     const used = new Set<string>();
-    const rows = colors.map((name) => {
-      const match = findColorImagesEntry(name, colorImages);
+    const rows = (colors.length ? colors : resolved.map((entry) => entry.color)).map((name) => {
+      const match = findColorImagesEntry(name, resolved);
       const rowImages = (match?.images ?? []).filter((src) => src.trim());
       rowImages.forEach((src) => used.add(src));
       return { name, images: rowImages };
@@ -236,7 +268,8 @@ export function getImageIndicesForColor(
   images: string[],
   colorImages?: ProductColorImages[],
 ) {
-  const mapped = indicesFromColorImages(color, images, colorImages);
+  const resolved = resolveColorImages(colors, images, colorImages);
+  const mapped = indicesFromColorImages(color, images, resolved);
   if (mapped.length > 0) return mapped;
 
   const scored = images
@@ -278,13 +311,14 @@ export function indexToColor(
   colorImages?: ProductColorImages[],
 ) {
   const src = images[index] ?? "";
-  if (src && colorImages?.length) {
-    const owner = colorImages.find((entry) => entry.images.includes(src));
+  const resolved = resolveColorImages(colors, images, colorImages);
+  if (src && resolved.length) {
+    const owner = resolved.find((entry) => entry.images.includes(src));
     if (owner) return owner.color;
   }
 
   for (const color of colors) {
-    if (getImageIndicesForColor(color, colors, images, colorImages).includes(index)) {
+    if (getImageIndicesForColor(color, colors, images, resolved).includes(index)) {
       return color;
     }
   }
