@@ -55,7 +55,7 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
           width={1200}
           height={1500}
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
+          className="aspect-[4/5] w-full object-cover object-top sm:transition-transform sm:duration-700 sm:hover:scale-105"
         />
       </Link>
 

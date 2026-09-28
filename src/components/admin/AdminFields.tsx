@@ -14,6 +14,35 @@ export async function uploadAdminImage(file: File): Promise<string> {
   return data.url;
 }
 
+const MIN_PRODUCT_PHOTO_WIDTH = 1200;
+
+function readImageSize(file: File) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const size = { width: img.naturalWidth, height: img.naturalHeight };
+      URL.revokeObjectURL(url);
+      resolve(size);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read that image."));
+    };
+    img.src = url;
+  });
+}
+
+/** Phone screens are about 3x sharper than the layout width, so a small file looks blocky. */
+export async function assertProductPhotoIsSharp(file: File) {
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return;
+  const { width, height } = await readImageSize(file);
+  if (width >= MIN_PRODUCT_PHOTO_WIDTH) return;
+  throw new Error(
+    `This photo is ${width}×${height}px. On a phone it gets stretched and looks pixelated. Upload a photo at least ${MIN_PRODUCT_PHOTO_WIDTH}px wide.`,
+  );
+}
+
 export function SizeChartField({
   value,
   onChange,
