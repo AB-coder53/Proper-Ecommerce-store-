@@ -63,6 +63,7 @@ export function ProductImage({
       quality={quality}
       className={cn(className)}
       priority={priority}
+      unoptimized
     />
   );
 }
