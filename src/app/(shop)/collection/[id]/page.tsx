@@ -20,7 +20,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const product = await getProductById(id);
-  if (!product) return {};
+  if (!product || product.archived) return {};
 
   return buildPageMetadata({
     title: product.name,
@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductPage({ params }: Props) {
   const { id } = await params;
   const product = await getProductById(id);
-  if (!product) notFound();
+  if (!product || product.archived) notFound();
   const [bundles, delivery, reviewListing] = await Promise.all([
     getActiveBundleViewsForProduct(product.id),
     getDeliveryEstimate(product.id),

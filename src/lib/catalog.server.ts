@@ -14,7 +14,12 @@ import { parsePriceInr } from "@/lib/price";
 import { attachStoredColorImages, writeStoredColorImages } from "@/lib/color-images.server";
 import { resolveMediaUrl, resolveMediaUrls } from "@/lib/media";
 import { parseColorImages, resolveColorImages } from "@/lib/product-colors";
-import { attachProductBadges, setProductBadges } from "@/lib/promotions.server";
+import { ARCHIVE_BADGE_ID } from "@/lib/promotions";
+import {
+  attachProductBadges,
+  setProductArchiveFlag,
+  setProductBadges,
+} from "@/lib/promotions.server";
 import { getSupabaseReadClient, getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
@@ -124,9 +129,17 @@ async function readSupabaseCatalog(): Promise<Catalog> {
     products: await attachStoredColorImages((productsRes.data ?? []).map(mapProduct)),
     collections: (collectionsRes.data ?? []).map(mapCollection),
   };
+  const withBadges = await attachProductBadges(await attachInventory(catalog.products));
   return {
     ...catalog,
-    products: await attachProductBadges(await attachInventory(catalog.products)),
+    products: withBadges.map((product) => {
+      const badgeIds = product.badgeIds ?? [];
+      return {
+        ...product,
+        archived: badgeIds.includes(ARCHIVE_BADGE_ID),
+        badgeIds: badgeIds.filter((id) => id !== ARCHIVE_BADGE_ID),
+      };
+    }),
   };
 }
 
@@ -139,16 +152,44 @@ const loadCatalogCached = unstable_cache(resolveCatalog, ["catalog"], {
   tags: [CATALOG_CACHE_TAG],
 });
 
-/** Dedupes catalog reads within a single request (layout + page). */
-export const getCatalog = cache(loadCatalogCached);
+/** Full catalogue, including products hidden from the storefront. */
+const getFullCatalog = cache(loadCatalogCached);
+
+/** Storefront catalogue. Archived products and tiles that point at them are omitted. */
+export const getCatalog = cache(async () => {
+  const catalog = await getFullCatalog();
+  const products = catalog.products.filter((product) => !product.archived);
+  const visibleIds = new Set(products.map((product) => product.id));
+  return {
+    ...catalog,
+    products,
+    collections: catalog.collections.filter(
+      (collection) => !collection.productId || visibleIds.has(collection.productId),
+    ),
+  };
+});
 
 export async function getProducts(): Promise<Product[]> {
   return (await getCatalog()).products;
 }
 
+export async function getAdminProducts(): Promise<Product[]> {
+  return (await getFullCatalog()).products;
+}
+
 export async function getProductById(id: string): Promise<Product | undefined> {
-  const products = await getProducts();
+  const products = await getAdminProducts();
   return products.find((p) => p.id === id);
+}
+
+export async function setProductArchived(id: string, archived: boolean) {
+  const existing = await getProductById(id);
+  if (!existing) throw new Error("Product not found");
+  await setProductArchiveFlag(id, archived);
+  invalidateCatalogCache();
+  revalidatePath("/");
+  revalidatePath("/collection");
+  revalidatePath(`/collection/${id}`);
 }
 
 export async function getAllProductIds(): Promise<string[]> {

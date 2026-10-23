@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useLiveGuestTracking, useLiveOrders } from "@/hooks/use-live-orders";
 import { ORDER_STATUS_LABELS } from "@/lib/commerce-constants";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
+import { cdnImageUrl } from "@/lib/media";
 import { formatOrderDate, type GuestOrderTracking } from "@/lib/order-tracking";
 
 export default function TrackOrderPage() {
@@ -235,7 +236,7 @@ export default function TrackOrderPage() {
                 <li key={`${item.productName}-${index}`} className="flex gap-3">
                   {item.productImage ? (
                     <img
-                      src={item.productImage}
+                      src={cdnImageUrl(item.productImage)}
                       alt=""
                       className="size-14 rounded-xl object-cover object-top"
                     />

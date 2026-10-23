@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { requireAdminSession } from "@/lib/admin-auth.server";
 import { createAdminOrder, listAllOrders } from "@/lib/commerce.server";
+import { isListedOrder } from "@/lib/order-tracking";
 import { adminOrderSchema } from "@/lib/commerce-types";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await requireAdminSession();
-    const orders = await listAllOrders();
+    const orders = (await listAllOrders()).filter(isListedOrder);
     return NextResponse.json({ orders }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

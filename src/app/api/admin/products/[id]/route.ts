@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { requireAdminSession } from "@/lib/admin-auth.server";
-import { deleteProduct, getProductById, saveProduct } from "@/lib/catalog.server";
+import {
+  deleteProduct,
+  getProductById,
+  saveProduct,
+  setProductArchived,
+} from "@/lib/catalog.server";
 import { asProduct, productSchema } from "@/lib/catalog-types";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -47,6 +52,29 @@ export async function PUT(request: Request, ctx: Ctx) {
         : typeof error === "object" && error && "message" in error
           ? String((error as { message?: unknown }).message ?? "Could not update product")
           : "Could not update product";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
+}
+
+export async function PATCH(request: Request, ctx: Ctx) {
+  try {
+    await requireAdminSession();
+    const { id } = await ctx.params;
+    const body = (await request.json()) as { archived?: unknown };
+    if (typeof body.archived !== "boolean") {
+      return NextResponse.json(
+        { error: "Choose whether to archive this product." },
+        { status: 400 },
+      );
+    }
+    await setProductArchived(id, body.archived);
+    const product = await getProductById(id);
+    return NextResponse.json({ product });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const message = error instanceof Error ? error.message : "Could not update product";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -6,6 +6,9 @@ import { Loader2 } from "lucide-react";
 
 import { ImageUploadField } from "@/components/admin/AdminFields";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { Collection, Product } from "@/lib/catalog-types";
 
@@ -60,88 +63,90 @@ export function CollectionForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 rounded-3xl border border-border bg-white p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Collection ID (slug)</label>
-          <input
-            required
-            disabled={mode === "edit"}
-            value={form.id}
-            onChange={(e) => set("id", e.target.value)}
-            placeholder="oversized"
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm disabled:bg-muted"
-          />
+    <Card className="bg-white shadow-none">
+      <form onSubmit={onSubmit} className="space-y-5 p-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Collection ID (slug)</Label>
+            <Input
+              required
+              disabled={mode === "edit"}
+              value={form.id}
+              onChange={(e) => set("id", e.target.value)}
+              placeholder="oversized"
+              className="h-11 rounded-xl bg-white"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Title</Label>
+            <Input
+              required
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+              className="h-11 rounded-xl bg-white"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Linked product</Label>
+            <NativeSelect
+              value={form.productId ?? ""}
+              onChange={(e) => set("productId", e.target.value)}
+            >
+              <option value="">None</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <div className="space-y-2">
+            <Label>Tint class</Label>
+            <Input
+              value={form.tint}
+              onChange={(e) => set("tint", e.target.value)}
+              placeholder="bg-white"
+              className="h-11 rounded-xl bg-white"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Sort order</Label>
+            <Input
+              type="number"
+              value={form.sortOrder}
+              onChange={(e) => set("sortOrder", Number(e.target.value) || 0)}
+              className="h-11 rounded-xl bg-white"
+            />
+          </div>
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Title</label>
-          <input
-            required
-            value={form.title}
-            onChange={(e) => set("title", e.target.value)}
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm"
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Linked product</label>
-          <NativeSelect
-            value={form.productId ?? ""}
-            onChange={(e) => set("productId", e.target.value)}
+
+        <ImageUploadField
+          label="Collection image"
+          value={form.image}
+          onChange={(v) => set("image", v)}
+        />
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <div className="flex gap-3">
+          <Button
+            type="submit"
+            disabled={saving}
+            className="rounded-full bg-teal text-teal-foreground"
           >
-            <option value="">None</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </NativeSelect>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+            {mode === "create" ? "Create collection" : "Save changes"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Tint class</label>
-          <input
-            value={form.tint}
-            onChange={(e) => set("tint", e.target.value)}
-            placeholder="bg-white"
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm"
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Sort order</label>
-          <input
-            type="number"
-            value={form.sortOrder}
-            onChange={(e) => set("sortOrder", Number(e.target.value) || 0)}
-            className="h-11 w-full rounded-xl border border-border px-3 text-sm"
-          />
-        </div>
-      </div>
-
-      <ImageUploadField
-        label="Collection image"
-        value={form.image}
-        onChange={(v) => set("image", v)}
-      />
-
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-      <div className="flex gap-3">
-        <Button
-          type="submit"
-          disabled={saving}
-          className="rounded-full bg-teal text-teal-foreground"
-        >
-          {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-          {mode === "create" ? "Create collection" : "Save changes"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="rounded-full"
-          onClick={() => router.back()}
-        >
-          Cancel
-        </Button>
-      </div>
-    </form>
+      </form>
+    </Card>
   );
 }

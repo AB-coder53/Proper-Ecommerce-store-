@@ -79,10 +79,7 @@ export function CartDrawer() {
   const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
   const discount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
   const total = Math.max(0, subtotal - discount);
-  const appliedBundles = qualifyingBundles(
-    bundles,
-    lines.map((line) => line.productId),
-  );
+  const appliedBundles = qualifyingBundles(bundles, lines);
 
   const checkout = () => {
     closeCart();

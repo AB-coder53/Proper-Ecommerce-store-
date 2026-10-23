@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
@@ -10,6 +10,9 @@ import { ColorSwatchRow } from "@/components/site/ColorSwatchRow";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
+import { useInView } from "@/hooks/use-in-view";
+import { cn } from "@/lib/utils";
+import { cdnImageUrl } from "@/lib/media";
 import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 import { buildDisplayCartLines, validateDisplayCartLines } from "@/lib/cart-display";
@@ -57,6 +60,8 @@ export default function CartPage() {
   const itemCount = useMemo(() => lines.reduce((n, line) => n + line.quantity, 0), [lines]);
   const discount = hasOffer ? resolveIstefadaDiscount(promoCode, lines) : 0;
   const total = Math.max(0, subtotal - discount);
+  const checkoutRef = useRef<HTMLButtonElement>(null);
+  const checkoutInView = useInView(checkoutRef, lines.length > 0);
 
   const checkout = () => {
     if (issues.length) return;
@@ -68,7 +73,7 @@ export default function CartPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+    <div className="mx-auto max-w-5xl px-5 py-12 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-16 lg:pb-16">
       <h1 className="font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">
         Your Cart
       </h1>
@@ -101,7 +106,7 @@ export default function CartPage() {
                   className="flex gap-4 rounded-3xl border border-border bg-background p-4"
                 >
                   <img
-                    src={line.image}
+                    src={cdnImageUrl(line.image)}
                     alt={line.name}
                     className="size-24 rounded-2xl object-cover object-top sm:size-28"
                   />
@@ -176,7 +181,7 @@ export default function CartPage() {
             })}
           </div>
 
-          <aside className="h-fit rounded-3xl border border-border bg-sand p-6">
+          <aside className="h-fit rounded-3xl border border-border bg-sand p-6 lg:sticky lg:top-24">
             <h2 className="font-display text-2xl font-bold">Summary</h2>
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between">
@@ -201,9 +206,10 @@ export default function CartPage() {
               </div>
             </div>
             <Button
+              ref={checkoutRef}
               onClick={checkout}
               disabled={issues.length > 0}
-              className="mt-6 h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.12em] text-teal-foreground uppercase"
+              className="mt-6 h-14 w-full rounded-full bg-teal text-sm font-semibold tracking-[0.08em] text-teal-foreground uppercase"
             >
               Checkout
             </Button>
@@ -220,6 +226,30 @@ export default function CartPage() {
           </aside>
         </div>
       )}
+
+      {lines.length ? (
+        <div
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur-md transition-transform duration-200 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden",
+            checkoutInView ? "pointer-events-none translate-y-full" : "translate-y-0",
+          )}
+          aria-hidden={checkoutInView}
+        >
+          <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-lg font-bold text-teal">{formatInr(total)}</p>
+            </div>
+            <Button
+              onClick={checkout}
+              disabled={issues.length > 0}
+              className="h-12 flex-1 rounded-full bg-teal text-sm font-semibold tracking-[0.08em] text-teal-foreground uppercase"
+            >
+              Checkout
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

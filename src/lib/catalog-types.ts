@@ -81,6 +81,7 @@ export type ProductVariant = {
 export type Product = Omit<z.infer<typeof productSchema>, "variants"> & {
   variants: ProductVariant[];
   badges?: ProductBadge[];
+  archived?: boolean;
 };
 export type Collection = z.infer<typeof collectionSchema>;
 

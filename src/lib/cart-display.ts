@@ -5,7 +5,7 @@ import type { CartItemInput, CartLine } from "@/lib/commerce-types";
 import { parsePriceInr } from "@/lib/price";
 import { colorToImageIndex } from "@/lib/product-colors";
 import { istefadaUnitOff } from "@/lib/istefada-offer";
-import type { BundleOfferView } from "@/lib/store-offers";
+import { cartCoversBundleItems, type BundleOfferView } from "@/lib/store-offers";
 
 export type DisplayCartLine = {
   key: string;
@@ -116,9 +116,11 @@ export function linePricing(line: DisplayCartLine, hasOffer: boolean) {
   };
 }
 
-export function qualifyingBundles(bundles: BundleOfferView[], productIds: string[]) {
-  const ids = new Set(productIds);
-  return bundles.filter((bundle) => bundle.items.every((item) => ids.has(item.id)));
+export function qualifyingBundles(
+  bundles: BundleOfferView[],
+  lines: { productId: string; color?: string; quantity?: number }[],
+) {
+  return bundles.filter((bundle) => cartCoversBundleItems(bundle.items, lines));
 }
 
 export function validateDisplayCartLines(

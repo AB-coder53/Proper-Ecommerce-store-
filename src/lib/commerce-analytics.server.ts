@@ -30,8 +30,10 @@ export async function getCommerceAnalytics(
     const time = Date.parse(order.createdAt);
     return time >= previousFrom.getTime() && time < from.getTime();
   });
-  const sales = inRange.filter((order) => !EXCLUDED.has(order.orderStatus));
-  const previousSales = previous.filter((order) => !EXCLUDED.has(order.orderStatus));
+  const isSale = (order: (typeof orders)[number]) =>
+    order.paymentStatus === "paid" && !EXCLUDED.has(order.orderStatus);
+  const sales = inRange.filter(isSale);
+  const previousSales = previous.filter(isSale);
   const revenue = sales.reduce((sum, order) => sum + order.totalAmount, 0);
   const previousRevenue = previousSales.reduce((sum, order) => sum + order.totalAmount, 0);
 

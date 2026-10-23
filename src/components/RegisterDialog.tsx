@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import type { Product } from "@/data/products";
 import type { ReservationResult } from "@/lib/api-types";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
+import { cdnImageUrl } from "@/lib/media";
 import { makeReservationId } from "@/lib/reservation-utils";
 import { readEarlyAccessEmail } from "@/lib/early-access";
 import { useCatalog } from "@/components/site/CatalogProvider";
@@ -306,7 +307,7 @@ export function RegisterDialog({ open, onOpenChange, product }: Props) {
                           }`}
                         >
                           <img
-                            src={p.image}
+                            src={cdnImageUrl(p.image)}
                             alt={p.name}
                             loading="lazy"
                             width={160}

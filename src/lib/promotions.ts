@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** Hidden marker. Assigning it archives a product without showing a storefront badge. */
+export const ARCHIVE_BADGE_ID = "system-archived";
+
 export const badgeToneSchema = z.enum(["default", "teal", "ink", "sale"]);
 
 export const productBadgeSchema = z.object({

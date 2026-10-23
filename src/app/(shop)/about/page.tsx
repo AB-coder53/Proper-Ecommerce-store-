@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Quote } from "lucide-react";
 
 import { Reveal } from "@/components/Reveal";
-import { catalogImageUrl } from "@/lib/media";
+import { catalogImageUrl, cdnImageUrl } from "@/lib/media";
 import { JsonLd, breadcrumbJsonLd, buildPageMetadata } from "@/lib/seo";
 
 export const metadata = buildPageMetadata({
@@ -40,7 +40,7 @@ export default function AboutPage() {
       <section className="px-5 py-10 sm:px-8">
         <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
           <img
-            src={catalogImageUrl("fabric.jpg")}
+            src={cdnImageUrl(catalogImageUrl("fabric.jpg"))}
             alt="Close-up of heavyweight AB Collection cotton fabric"
             width={1408}
             height={1008}

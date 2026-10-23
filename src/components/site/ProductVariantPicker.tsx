@@ -24,13 +24,13 @@ export function ProductVariantPicker({
   const showStock = Boolean(product.variants?.length && selectedColor && selectedSize);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {options.requiresColor ? (
         <div>
           <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Colour
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
             {options.colors.map((color) => {
               const selected = color === selectedColor;
               const colorHasStock = options.sizes.some((size) =>
@@ -43,7 +43,7 @@ export function ProductVariantPicker({
                   aria-pressed={selected}
                   onClick={() => onColorChange(color)}
                   className={cn(
-                    "inline-flex min-h-11 items-center gap-2.5 rounded-full border px-4 py-2 text-sm transition-colors outline-none focus-visible:ring-0",
+                    "inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-full border px-4 py-2 text-sm transition-colors outline-none focus-visible:ring-0",
                     selected
                       ? "border-foreground bg-foreground text-background"
                       : "border-border bg-background hover:border-foreground",

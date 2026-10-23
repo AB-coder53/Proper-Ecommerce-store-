@@ -17,6 +17,25 @@ export type GuestOrderTracking = {
 };
 
 const CLOSED = new Set(["delivered", "cancelled", "failed", "returned"]);
+const OPEN_FULFILLMENT = new Set([
+  "placed",
+  "confirmed",
+  "processing",
+  "packed",
+  "shipped",
+  "out_for_delivery",
+]);
+
+/** Paid orders, plus unpaid orders that are still being fulfilled. Closed reservations with no payment stay out of the order list. */
+export function isListedOrder(order: {
+  paymentStatus: string;
+  orderStatus: string;
+  totalAmount: number;
+}) {
+  if (order.paymentStatus === "paid" || order.paymentStatus === "refunded") return true;
+  if (order.paymentStatus === "failed" || order.totalAmount <= 0) return false;
+  return OPEN_FULFILLMENT.has(order.orderStatus);
+}
 
 export function isTrackableStatus(status: string) {
   return !CLOSED.has(status);

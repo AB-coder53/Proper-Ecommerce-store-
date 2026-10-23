@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { Product } from "@/lib/catalog-types";
-import { productHasPurchasableStock } from "@/lib/inventory";
+import { productHasPurchasableStock, variantHasStock } from "@/lib/inventory";
 import { formatInr, parsePriceInr } from "@/lib/price";
 
 export const bundleOfferSchema = z.object({
@@ -13,6 +13,7 @@ export const bundleOfferSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase slug ids like summer-3-pack"),
   title: z.string().trim().min(2).max(120),
   productIds: z.array(z.string().trim().min(1).max(80)).min(2).max(12),
+  productColors: z.array(z.string().trim().max(40)).max(12).default([]),
   showOnProductIds: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   pricingType: z.enum(["fixed", "percent"]).default("fixed"),
   bundlePrice: z.number().int().min(0).max(10_000_000).default(0),
@@ -29,7 +30,7 @@ export type BundleOffer = z.infer<typeof bundleOfferSchema>;
 export type BundleOfferView = {
   id: string;
   title: string;
-  items: { id: string; name: string; priceLabel: string; price: number }[];
+  items: { id: string; name: string; color: string; priceLabel: string; price: number }[];
   individualTotal: number;
   individualTotalLabel: string;
   bundlePrice: number;
@@ -43,20 +44,69 @@ export function displayProductIds(offer: BundleOffer): string[] {
   return offer.showOnProductIds.length > 0 ? offer.showOnProductIds : offer.productIds;
 }
 
+export function bundleItemColor(offer: BundleOffer, index: number) {
+  return offer.productColors[index]?.trim() ?? "";
+}
+
+/** Stored beside the product id so a tee can be pinned to one colour without a new column. */
+export function encodeBundleProductRef(productId: string, color: string) {
+  const trimmed = color.trim();
+  return trimmed ? `${productId}@${trimmed}` : productId;
+}
+
+export function decodeBundleProductRef(entry: string) {
+  const at = entry.indexOf("@");
+  if (at <= 0) return { productId: entry, color: "" };
+  return { productId: entry.slice(0, at), color: entry.slice(at + 1) };
+}
+
+export function cartCoversBundleItems(
+  items: { id: string; color?: string }[],
+  lines: { productId: string; color?: string; quantity?: number }[],
+) {
+  const pool = lines.map((line) => ({
+    productId: line.productId,
+    color: line.color ?? "",
+    quantity: Math.max(0, line.quantity ?? 1),
+  }));
+  for (const item of items) {
+    const index = pool.findIndex(
+      (line) =>
+        line.quantity > 0 &&
+        line.productId === item.id &&
+        (!item.color || line.color === item.color),
+    );
+    const match = index >= 0 ? pool[index] : undefined;
+    if (!match) return false;
+    match.quantity -= 1;
+  }
+  return true;
+}
+
+function bundleColorInStock(product: Product, color: string) {
+  if (!color) return productHasPurchasableStock(product);
+  if (!product.colors.includes(color)) return false;
+  if (!product.variants?.length) return true;
+  return product.sizes.some((size) => variantHasStock(product, color, size));
+}
+
 export function bestApplicableBundle(
   offers: BundleOffer[],
   products: Product[],
-  cartProductIds: string[],
+  cartLines: { productId: string; color?: string; quantity?: number }[],
   now = new Date(),
 ) {
-  const cart = new Set(cartProductIds);
   let best: { offer: BundleOffer; view: BundleOfferView } | null = null;
   for (const offer of offers) {
     if (!isBundleOfferActive(offer, now)) continue;
-    if (!offer.productIds.every((id) => cart.has(id))) continue;
-    const unavailable = offer.productIds.some((id) => {
-      const product = products.find((row) => row.id === id);
-      return !product || !productHasPurchasableStock(product);
+    const required = offer.productIds.map((id, index) => ({
+      id,
+      color: bundleItemColor(offer, index),
+    }));
+    if (!cartCoversBundleItems(required, cartLines)) continue;
+    const unavailable = required.some((item) => {
+      const product = products.find((row) => row.id === item.id);
+      return !product || !bundleColorInStock(product, item.color);
     });
     if (unavailable) continue;
     const view = toBundleOfferView(offer, products);
@@ -98,12 +148,18 @@ export function isBundleOfferActive(offer: BundleOffer, now = new Date()): boole
 }
 
 export function toBundleOfferView(offer: BundleOffer, products: Product[]): BundleOfferView | null {
-  const items = offer.productIds.map((id) => {
+  const items = offer.productIds.map((id, index) => {
     const product = products.find((row) => row.id === id);
     if (!product) return null;
     const price = parsePriceInr(product.price);
     if (!price) return null;
-    return { id: product.id, name: product.name, priceLabel: product.price, price };
+    return {
+      id: product.id,
+      name: product.name,
+      color: bundleItemColor(offer, index),
+      priceLabel: product.price,
+      price,
+    };
   });
   if (items.some((item) => item == null)) return null;
   const resolved = items.filter(

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import type { Product } from "@/lib/catalog-types";
-import { catalogImageUrl } from "@/lib/media";
+import { catalogImageUrl, cdnImageUrl } from "@/lib/media";
 import { SITE_EMAIL, SITE_LOCALE, SITE_NAME, SITE_TAGLINE, SITE_URL } from "@/lib/site";
 
 type PageSeoInput = {
@@ -33,7 +33,7 @@ export function buildPageMetadata({
   noIndex = false,
 }: PageSeoInput): Metadata {
   const url = absoluteUrl(path);
-  const imageUrl = absoluteUrl(image);
+  const imageUrl = absoluteUrl(cdnImageUrl(image));
   const fullTitle = title.includes(SITE_NAME) ? title : `${title} · ${SITE_NAME}`;
 
   return {
@@ -114,7 +114,7 @@ export function productJsonLd(
     description: product.description,
     image: (product.images ?? [product.image])
       .filter((src) => src.trim())
-      .map((src) => absoluteUrl(src)),
+      .map((src) => absoluteUrl(cdnImageUrl(src))),
     brand: { "@type": "Brand", name: SITE_NAME },
     category: "Men's T-Shirts",
     material: product.fabric,

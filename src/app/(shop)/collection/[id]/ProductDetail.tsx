@@ -5,6 +5,12 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Heart, Minus, Plus } from "lucide-react";
 
 import { useCommerce } from "@/components/commerce/CommerceProvider";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { CatalogPrice } from "@/components/site/CatalogPrice";
 import { ProductBadgeList } from "@/components/site/ProductBadgeList";
 import { ProductBundleOffers } from "@/components/site/ProductBundleOffers";
@@ -17,20 +23,33 @@ import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { addToCartLabel, useAddToCart } from "@/hooks/use-add-to-cart";
+import { useInView } from "@/hooks/use-in-view";
 import { useProductInventory } from "@/hooks/use-product-inventory";
 import type { Product } from "@/lib/catalog-types";
 import {
   availableStock,
   productHasPurchasableStock,
   quantityCap,
+  stockStatusLabel,
   variantHasStock,
 } from "@/lib/inventory";
+import { cdnImageUrl } from "@/lib/media";
 import { colorToImageIndex, indexToColor, visibleImageIndexes } from "@/lib/product-colors";
 import { isValidProductVariant } from "@/lib/product-variants";
 import type { ReviewListing } from "@/lib/reviews";
 import type { DeliveryEstimate } from "@/lib/shipping";
 import type { BundleOfferView } from "@/lib/store-offers";
 import { cn } from "@/lib/utils";
+
+function firstPurchasableVariant(product: Product) {
+  const colors = product.colors.length ? product.colors : [""];
+  const sizes = product.sizes.length ? product.sizes : ["M"];
+  for (const color of colors) {
+    const size = sizes.find((candidate) => variantHasStock(product, color, candidate));
+    if (size) return { color, size };
+  }
+  return { color: colors[0] ?? "", size: sizes[0] ?? "M" };
+}
 
 export function ProductDetail({
   product,
@@ -46,12 +65,17 @@ export function ProductDetail({
   const liveProduct = useProductInventory(product);
   const images = liveProduct.images?.length ? liveProduct.images : [liveProduct.image];
   const visibleIndexes = visibleImageIndexes(images);
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(product.colors[0] ?? "");
-  const [selectedSize, setSelectedSize] = useState(product.sizes[0] ?? "M");
+  const [initialVariant] = useState(() => firstPurchasableVariant(product));
+  const [selectedImageIndex, setSelectedImageIndex] = useState(() =>
+    colorToImageIndex(initialVariant.color, product.colors, images, product.colorImages),
+  );
+  const [selectedColor, setSelectedColor] = useState(initialVariant.color);
+  const [selectedSize, setSelectedSize] = useState(initialVariant.size);
   const [quantity, setQuantity] = useState(1);
   const [sizeChartOpen, setSizeChartOpen] = useState(false);
-  const { buyNow, toggleWishlist, wishlistIds } = useCommerce();
+  const purchaseRef = useRef<HTMLDivElement>(null);
+  const purchaseInView = useInView(purchaseRef);
+  const { buyNow, toggleWishlist, wishlistIds, cartDrawerOpen } = useCommerce();
   const { status, error, run, isBusy } = useAddToCart();
   const { hasOffer } = useIstefadaOffer();
   const wished = wishlistIds.has(product.id);
@@ -102,11 +126,14 @@ export function ProductDetail({
     color: selectedColor,
     quantity,
   };
+  const showStickyBar = !purchaseInView && !cartDrawerOpen;
+  const buyLabel = inStock ? "Buy now" : "Out of stock";
+  const cartLabel = inStock ? addToCartLabel(status) : "Out of stock";
 
   return (
-    <div className="mx-auto grid min-w-0 max-w-7xl gap-10 px-5 py-12 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-20">
-      <div className="min-w-0">
-        <div className="relative overflow-hidden rounded-3xl bg-muted">
+    <div className="mx-auto grid min-w-0 max-w-7xl pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-16 lg:pb-20">
+      <div className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+        <div className="relative overflow-hidden bg-muted lg:rounded-3xl">
           <ProductImage
             key={`${selectedImageIndex}-${activeImage}`}
             src={activeImage}
@@ -115,7 +142,7 @@ export function ProductDetail({
             height={2250}
             sizes="(max-width: 1024px) 100vw, 56vw"
             priority={heroPrioritySrc.current === activeImage}
-            className="aspect-[4/5] w-full object-cover object-top transition-opacity duration-300"
+            className="h-[30svh] w-full object-cover object-top transition-opacity duration-300 sm:h-[46svh] lg:aspect-[4/5] lg:h-auto"
           />
           {visibleIndexes.length > 1 ? (
             <>
@@ -139,7 +166,7 @@ export function ProductDetail({
           ) : null}
         </div>
         {visibleIndexes.length > 1 ? (
-          <div className="mt-4 grid grid-cols-4 gap-3">
+          <div className="mt-3 flex gap-2 overflow-x-auto px-5 pb-1 lg:px-0">
             {visibleIndexes.map((i) => {
               const src = images[i] ?? "";
               const thumbColor = indexToColor(
@@ -157,7 +184,7 @@ export function ProductDetail({
                   aria-pressed={selectedThumb}
                   onClick={() => selectImageIndex(i)}
                   className={cn(
-                    "overflow-hidden rounded-xl transition-opacity outline-none focus-visible:ring-0",
+                    "w-14 shrink-0 overflow-hidden rounded-xl transition-opacity outline-none focus-visible:ring-0 sm:w-20",
                     selectedThumb
                       ? "opacity-100 ring-2 ring-foreground/20"
                       : "opacity-70 hover:opacity-100",
@@ -178,7 +205,7 @@ export function ProductDetail({
         ) : null}
       </div>
 
-      <div>
+      <div className="px-5 pt-5 lg:px-0 lg:pt-0">
         <nav
           className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
           aria-label="Breadcrumb"
@@ -194,10 +221,10 @@ export function ProductDetail({
           <span className="min-w-0 break-words text-foreground">{product.name}</span>
         </nav>
 
-        <div className="mt-8 flex items-start justify-between gap-4">
+        <div className="mt-4 flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">{product.fabric}</p>
-            <h1 className="mt-3 font-display text-[clamp(1.75rem,8vw,3rem)] font-bold tracking-tight sm:text-5xl">
+            <h1 className="mt-2 font-display text-[1.65rem] leading-none font-bold tracking-tight sm:text-5xl">
               {product.name}
             </h1>
             <ProductBadgeList product={liveProduct} className="mt-3" />
@@ -238,33 +265,19 @@ export function ProductDetail({
           ) : null}
         </div>
 
-        <p className="mt-6 text-base leading-relaxed text-muted-foreground">
-          {product.description}
-        </p>
-
-        <ul className="mt-8 space-y-3">
-          {product.details.map((detail) => (
-            <li key={detail} className="flex items-start gap-3 text-sm text-muted-foreground">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal" />
-              {detail}
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-8 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="mt-6 space-y-6">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-              Options
+              Choose colour and size
             </p>
             {hasSizeChart ? (
-              <Button
+              <button
                 type="button"
-                variant="outline"
                 onClick={() => setSizeChartOpen(true)}
-                className="h-11 rounded-full px-4 text-xs font-semibold tracking-[0.12em] uppercase"
+                className="text-sm font-medium underline underline-offset-4"
               >
-                Size Chart
-              </Button>
+                Size chart
+              </button>
             ) : null}
           </div>
           <ProductVariantPicker
@@ -276,12 +289,9 @@ export function ProductDetail({
           />
         </div>
 
-        <div className="mt-6">
-          <p className="text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-            Quantity
-          </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <div
-            className="mt-3 inline-flex items-center gap-1 rounded-full border border-border px-1 py-1"
+            className="inline-flex items-center gap-1 rounded-full border border-border px-1 py-1"
             aria-label="Quantity"
           >
             <button
@@ -306,34 +316,66 @@ export function ProductDetail({
               <Plus className="size-3.5" />
             </button>
           </div>
+          {variantReady ? (
+            <p
+              className={cn(
+                "text-sm font-medium",
+                stock <= 0
+                  ? "text-destructive"
+                  : stock <= 5
+                    ? "text-amber-700"
+                    : "text-muted-foreground",
+              )}
+            >
+              {stockStatusLabel(stock)}
+            </p>
+          ) : null}
         </div>
 
-        <ProductDeliveryEstimate estimate={delivery} />
-
-        <div className="mt-10 grid gap-3 sm:grid-cols-2">
+        <div ref={purchaseRef} className="mt-5 grid gap-3">
           <Button
             onClick={() => void buyNow(selected)}
             disabled={!canPurchase}
-            className="h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.14em] text-teal-foreground uppercase hover:bg-teal/90"
+            className="h-14 w-full rounded-full bg-teal text-sm font-semibold tracking-[0.08em] text-teal-foreground uppercase shadow-sm hover:bg-teal/90"
           >
-            {inStock ? "Buy Now" : "Out of Stock"}
+            {buyLabel}
           </Button>
           <Button
             type="button"
             disabled={isBusy || !canPurchase}
             onClick={() => void run(selected)}
             variant="outline"
-            className="h-12 w-full rounded-full border-foreground text-xs font-semibold tracking-[0.14em] uppercase"
+            className="h-12 w-full rounded-full border-foreground text-sm font-semibold"
           >
-            {inStock ? addToCartLabel(status) : "Out of Stock"}
+            {cartLabel}
           </Button>
         </div>
-        {!inStock && variantReady ? (
-          <p className="mt-3 text-sm text-destructive">
-            This product/variant is currently out of stock.
-          </p>
-        ) : null}
+
+        <ProductDeliveryEstimate estimate={delivery} />
         {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+
+        <p className="mt-6 text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+
+        {product.details.length ? (
+          <Accordion type="single" collapsible className="mt-4 border-t">
+            <AccordionItem value="details">
+              <AccordionTrigger>Fabric and details</AccordionTrigger>
+              <AccordionContent>
+                <ul className="space-y-3">
+                  {product.details.map((detail) => (
+                    <li
+                      key={detail}
+                      className="flex items-start gap-3 text-sm text-muted-foreground"
+                    >
+                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal" />
+                      {detail}
+                    </li>
+                  ))}
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : null}
 
         <ProductBundleOffers bundles={bundles} />
 
@@ -364,7 +406,7 @@ export function ProductDetail({
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
               <img
-                src={product.sizeChart}
+                src={cdnImageUrl(product.sizeChart)}
                 alt={`${product.name} size chart`}
                 className="mx-auto w-full max-w-full object-contain"
               />
@@ -372,6 +414,44 @@ export function ProductDetail({
           </DialogContent>
         </Dialog>
       ) : null}
+
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur-md transition-transform duration-200 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+          showStickyBar ? "translate-y-0" : "pointer-events-none translate-y-full",
+        )}
+        aria-hidden={!showStickyBar}
+      >
+        <div className="mx-auto flex max-w-7xl items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium">
+              {selectedColor}
+              {selectedSize ? ` · ${selectedSize}` : ""}
+              {variantReady ? ` · ${stockStatusLabel(stock)}` : ""}
+            </p>
+            <div className="hidden sm:block">
+              <CatalogPrice product={liveProduct} hasOffer={hasOffer} size="card" align="left" />
+            </div>
+          </div>
+          <Button
+            type="button"
+            disabled={isBusy || !canPurchase}
+            onClick={() => void run(selected)}
+            variant="outline"
+            className="h-11 w-[4.75rem] shrink-0 rounded-full border-foreground px-0 text-xs font-semibold sm:h-12 sm:w-auto sm:px-5 sm:text-sm"
+          >
+            <span className="sm:hidden">Add</span>
+            <span className="hidden sm:inline">{cartLabel}</span>
+          </Button>
+          <Button
+            onClick={() => void buyNow(selected)}
+            disabled={!canPurchase}
+            className="h-11 w-[6.75rem] shrink-0 rounded-full bg-teal px-0 text-xs font-semibold tracking-[0.04em] text-teal-foreground uppercase hover:bg-teal/90 sm:h-12 sm:w-auto sm:px-6 sm:text-sm"
+          >
+            {buyLabel}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 
+import { cdnImageUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 
 function isLocalSrc(src: string) {
@@ -38,7 +39,7 @@ export function ProductImage({
   priority?: boolean;
   quality?: number;
 }) {
-  const safe = src || "/favicon.png";
+  const safe = cdnImageUrl(src) || "/favicon.png";
   if (!isLocalSrc(safe) && !isOptimizableRemote(safe)) {
     return (
       <img

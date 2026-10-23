@@ -12,12 +12,15 @@ export function ProductBundleOffers({ bundles }: { bundles: BundleOfferView[] })
         <article key={bundle.id} className="rounded-3xl border border-border bg-sand p-5">
           <h2 className="font-display text-xl font-bold">{bundle.title}</h2>
           <ul className="mt-4 space-y-2">
-            {bundle.items.map((item) => (
+            {bundle.items.map((item, index) => (
               <li
-                key={item.id}
+                key={`${item.id}-${item.color}-${index}`}
                 className="flex items-start justify-between gap-3 text-sm text-muted-foreground"
               >
-                <span>{item.name}</span>
+                <span>
+                  {item.name}
+                  {item.color ? ` · ${item.color}` : ""}
+                </span>
                 <span className="shrink-0">{item.priceLabel}</span>
               </li>
             ))}

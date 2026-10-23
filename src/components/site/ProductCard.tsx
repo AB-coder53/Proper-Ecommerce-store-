@@ -40,7 +40,7 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
   };
 
   return (
-    <article className="flex h-full min-w-0 flex-col rounded-3xl border border-border bg-background p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+    <article className="flex h-full min-w-0 flex-col rounded-2xl border border-border bg-background p-3 shadow-[0_8px_30px_rgba(0,0,0,0.04)] sm:rounded-3xl sm:p-4">
       <Link
         href={`/collection/${product.id}`}
         className="relative overflow-hidden rounded-2xl bg-muted"
@@ -69,7 +69,7 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
 
       <div className="mt-3 flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-start justify-between gap-3">
-          <h3 className="min-w-0 break-words text-base font-bold leading-snug sm:text-lg">
+          <h3 className="min-w-0 break-words text-sm font-bold leading-snug sm:text-lg">
             <Link href={`/collection/${product.id}`} className="hover:text-teal">
               {product.name}
             </Link>
@@ -78,25 +78,19 @@ export function ProductCard({ product }: { product: Product; badge?: string | un
             <CatalogPrice product={product} hasOffer={hasOffer} />
           </div>
         </div>
-        <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">
           {product.tagline}
         </p>
-        <div className="mt-5 grid gap-2">
+        <div className="mt-3 sm:mt-5">
           <Button
             type="button"
             disabled={isBusy || soldOut || (Boolean(direct) && !directInStock)}
             onClick={onAdd}
-            className="h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.12em] text-teal-foreground uppercase hover:bg-teal/90"
+            className="h-11 w-full rounded-full bg-teal text-[11px] font-semibold tracking-[0.08em] text-teal-foreground uppercase hover:bg-teal/90 sm:h-12 sm:text-xs sm:tracking-[0.12em]"
           >
             {soldOut || (direct && !directInStock) ? "Sold Out" : addToCartLabel(status)}
           </Button>
-          {error ? <p className="text-center text-xs text-destructive">{error}</p> : null}
-          <Link
-            href={`/collection/${product.id}`}
-            className="inline-flex h-12 items-center justify-center rounded-full border border-border px-4 text-xs font-semibold leading-none tracking-[0.12em] uppercase transition-colors hover:bg-muted"
-          >
-            View Details
-          </Link>
+          {error ? <p className="mt-2 text-center text-xs text-destructive">{error}</p> : null}
         </div>
       </div>
 

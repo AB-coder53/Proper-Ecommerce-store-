@@ -1,14 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { DangerButton } from "@/components/admin/AdminFields";
+import { StatusPill } from "@/components/admin/StatusPill";
 import { OrderTimeline } from "@/components/commerce/OrderTimeline";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { Product } from "@/lib/catalog-types";
 import {
@@ -21,7 +23,7 @@ import type { OrderNotification } from "@/lib/notifications";
 import { formatInr, parsePriceInr } from "@/lib/price";
 
 const EXTRA = ["cancelled", "failed", "returned"] as const;
-const INPUT = "h-11 w-full rounded-xl border border-border bg-white px-3 text-sm disabled:bg-muted";
+const INPUT = "mt-1.5 h-11 rounded-xl bg-white";
 
 type FormItem = {
   productId: string;
@@ -224,27 +226,12 @@ export function OrderForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/admin/orders"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            ← Orders
-          </Link>
-          <h1 className="mt-3 font-display text-3xl font-bold">
-            {mode === "create" ? "New order" : `Order #${initial?.orderNumber}`}
-          </h1>
-          {initial ? (
-            <p className="mt-1 text-sm text-muted-foreground">
-              Updated {new Date(initial.updatedAt).toLocaleString("en-IN")}
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-muted-foreground">
-              Create a phone / WhatsApp / reservation order. Customers see it immediately.
-            </p>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {initial ? (
+          <p className="mr-auto text-sm text-muted-foreground">
+            Updated {new Date(initial.updatedAt).toLocaleString("en-IN")}
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           {mode === "edit" && initial ? (
             <>
@@ -286,12 +273,12 @@ export function OrderForm({
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <section className="rounded-2xl border border-border bg-white p-5">
+      <Card className="bg-white p-5 shadow-none">
         <h2 className="font-semibold">Customer</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
             Name
-            <input
+            <Input
               required
               value={form.customerName}
               onChange={(e) => setField("customerName", e.target.value)}
@@ -300,7 +287,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Email
-            <input
+            <Input
               required
               type="email"
               value={form.customerEmail}
@@ -310,7 +297,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Phone
-            <input
+            <Input
               required
               value={form.customerPhone}
               onChange={(e) => setField("customerPhone", e.target.value)}
@@ -319,21 +306,21 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Alternate phone
-            <input
+            <Input
               value={form.alternatePhone}
               onChange={(e) => setField("alternatePhone", e.target.value)}
               className={`mt-1.5 ${INPUT}`}
             />
           </label>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-white p-5">
+      <Card className="bg-white p-5 shadow-none">
         <h2 className="font-semibold">Delivery address</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
             Address line 1
-            <input
+            <Input
               required
               value={form.addressLine1}
               onChange={(e) => setField("addressLine1", e.target.value)}
@@ -342,7 +329,7 @@ export function OrderForm({
           </label>
           <label className="text-sm sm:col-span-2">
             Address line 2
-            <input
+            <Input
               value={form.addressLine2}
               onChange={(e) => setField("addressLine2", e.target.value)}
               className={`mt-1.5 ${INPUT}`}
@@ -350,7 +337,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             City
-            <input
+            <Input
               required
               value={form.addressCity}
               onChange={(e) => setField("addressCity", e.target.value)}
@@ -359,7 +346,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             State
-            <input
+            <Input
               required
               value={form.addressState}
               onChange={(e) => setField("addressState", e.target.value)}
@@ -368,7 +355,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             PIN code
-            <input
+            <Input
               required
               inputMode="numeric"
               maxLength={6}
@@ -380,9 +367,9 @@ export function OrderForm({
             />
           </label>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-white p-5">
+      <Card className="bg-white p-5 shadow-none">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-semibold">Items</h2>
           <Button
@@ -422,7 +409,7 @@ export function OrderForm({
                   </label>
                   <label className="text-sm lg:col-span-2">
                     Name
-                    <input
+                    <Input
                       required
                       value={item.productName}
                       onChange={(e) => setItem(index, { productName: e.target.value })}
@@ -445,7 +432,7 @@ export function OrderForm({
                         ))}
                       </NativeSelect>
                     ) : (
-                      <input
+                      <Input
                         required
                         value={item.color}
                         onChange={(e) => setItem(index, { color: e.target.value })}
@@ -469,7 +456,7 @@ export function OrderForm({
                         ))}
                       </NativeSelect>
                     ) : (
-                      <input
+                      <Input
                         required
                         value={item.size}
                         onChange={(e) => setItem(index, { size: e.target.value })}
@@ -479,7 +466,7 @@ export function OrderForm({
                   </label>
                   <label className="text-sm">
                     Qty
-                    <input
+                    <Input
                       type="number"
                       min={1}
                       max={20}
@@ -490,7 +477,7 @@ export function OrderForm({
                   </label>
                   <label className="text-sm">
                     Unit ₹
-                    <input
+                    <Input
                       type="number"
                       min={0}
                       value={item.unitPrice}
@@ -527,7 +514,7 @@ export function OrderForm({
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
           <label className="text-sm">
             Shipping ₹
-            <input
+            <Input
               type="number"
               min={0}
               value={form.shippingCost}
@@ -537,7 +524,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Discount ₹
-            <input
+            <Input
               type="number"
               min={0}
               value={form.discount}
@@ -550,10 +537,20 @@ export function OrderForm({
             <p className="mt-1 font-bold text-teal">Total {formatInr(total)}</p>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-border bg-white p-5">
-        <h2 className="font-semibold">Status</h2>
+      <Card className="bg-white p-5 shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">Status</h2>
+          <div className="flex flex-wrap gap-2">
+            <StatusPill status={form.orderStatus}>
+              {ORDER_STATUS_LABELS[form.orderStatus] ?? form.orderStatus}
+            </StatusPill>
+            <StatusPill status={form.paymentStatus}>
+              {PAYMENT_STATUS_LABELS[form.paymentStatus] ?? form.paymentStatus}
+            </StatusPill>
+          </div>
+        </div>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
             Order status
@@ -587,7 +584,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Carrier
-            <input
+            <Input
               value={form.carrier}
               onChange={(e) => setField("carrier", e.target.value)}
               className={`mt-1.5 ${INPUT}`}
@@ -595,7 +592,7 @@ export function OrderForm({
           </label>
           <label className="text-sm">
             Tracking number
-            <input
+            <Input
               value={form.trackingNumber}
               onChange={(e) => setField("trackingNumber", e.target.value)}
               className={`mt-1.5 ${INPUT}`}
@@ -603,7 +600,7 @@ export function OrderForm({
           </label>
           <label className="text-sm sm:col-span-2">
             Tracking URL
-            <input
+            <Input
               value={form.trackingUrl}
               onChange={(e) => setField("trackingUrl", e.target.value)}
               className={`mt-1.5 ${INPUT}`}
@@ -613,10 +610,10 @@ export function OrderForm({
         <div className="mt-5">
           <OrderTimeline status={form.orderStatus} />
         </div>
-      </section>
+      </Card>
 
       {mode === "edit" ? (
-        <section className="rounded-2xl border border-border bg-white p-5">
+        <Card className="bg-white p-5 shadow-none">
           <h2 className="font-semibold">Customer notifications</h2>
           <ul className="mt-4 space-y-2 text-sm">
             {notifications.length ? (
@@ -639,7 +636,7 @@ export function OrderForm({
               <li className="text-muted-foreground">No notifications recorded yet.</li>
             )}
           </ul>
-        </section>
+        </Card>
       ) : null}
 
       <div className="flex justify-end">

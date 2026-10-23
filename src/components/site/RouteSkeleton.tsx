@@ -8,7 +8,7 @@ export function RouteSkeleton({
       <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8">
         <div className="mx-auto h-10 w-64 animate-pulse rounded-full bg-muted" />
         <div className="mx-auto mt-4 h-4 w-96 max-w-full animate-pulse rounded-full bg-muted" />
-        <div className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <div key={i} className="overflow-hidden rounded-3xl bg-muted">
               <div className="aspect-[4/5] animate-pulse bg-muted-foreground/10" />

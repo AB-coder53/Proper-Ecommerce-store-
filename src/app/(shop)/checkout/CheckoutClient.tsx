@@ -11,6 +11,8 @@ import { OrderPlaced } from "@/components/commerce/OrderPlaced";
 import { useIstefadaOffer } from "@/components/site/IstefadaOfferProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { Button } from "@/components/ui/button";
+import { useInView } from "@/hooks/use-in-view";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +25,7 @@ import {
 import { loadCashfreeCheckout } from "@/lib/cashfree-checkout";
 import { BUY_NOW_KEY, CHECKOUT_DRAFT_KEY } from "@/lib/commerce-constants";
 import type { CartItemInput, CheckoutInput, CustomerAddress, Order } from "@/lib/commerce-types";
+import { cdnImageUrl } from "@/lib/media";
 import { formatInr } from "@/lib/price";
 import { istefadaUnitOff, resolveIstefadaDiscount } from "@/lib/istefada-offer";
 import { apiErrorMessage, readJsonBody } from "@/lib/form-request";
@@ -102,6 +105,7 @@ export default function CheckoutClient() {
     })();
   }, [customer]);
 
+  const payRef = useRef<HTMLButtonElement>(null);
   const lines = useMemo(() => {
     if (mode === "buy_now" && buyNow) {
       return [displayLineFromInput(buyNow, products)];
@@ -119,6 +123,9 @@ export default function CheckoutClient() {
   const previewDiscount = couponQuote?.ok ? couponQuote.discount : istefadaDiscount;
   const previewCode = couponQuote?.ok ? couponQuote.code : hasOffer ? promoCode : "";
   const total = Math.max(0, subtotal - previewDiscount);
+  const showPay =
+    Boolean(customer) && lines.length > 0 && !confirmed && !loading && !(submitting && !paying);
+  const payInView = useInView(payRef, showPay);
 
   const applyCoupon = async () => {
     if (couponBusy) return;
@@ -369,7 +376,7 @@ export default function CheckoutClient() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
+    <div className="mx-auto max-w-5xl px-5 py-12 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-8 sm:py-16 lg:pb-16">
       <h1 className="font-display text-[2.15rem] font-bold tracking-tight sm:text-5xl">Checkout</h1>
       <p className="mt-3 text-sm text-muted-foreground">
         Confirm your details, then pay securely with Cashfree.
@@ -514,13 +521,13 @@ export default function CheckoutClient() {
           </section>
         </div>
 
-        <aside className="h-fit min-w-0 rounded-3xl border border-border bg-sand p-4 sm:p-6">
+        <aside className="h-fit min-w-0 rounded-3xl border border-border bg-sand p-4 sm:p-6 lg:sticky lg:top-24">
           <h2 className="font-display text-2xl font-bold">Order</h2>
           <ul className="mt-4 space-y-4">
             {lines.map((line) => (
               <li key={line.key} className="flex gap-3 text-sm">
                 <img
-                  src={line.image}
+                  src={cdnImageUrl(line.image)}
                   alt=""
                   className="size-16 rounded-xl object-cover object-top"
                 />
@@ -623,9 +630,10 @@ export default function CheckoutClient() {
             </>
           ) : null}
           <Button
+            ref={payRef}
             type="submit"
             disabled={submitting}
-            className="mt-6 h-12 w-full rounded-full bg-teal text-xs font-semibold tracking-[0.12em] text-teal-foreground uppercase"
+            className="mt-6 h-14 w-full rounded-full bg-teal text-sm font-semibold tracking-[0.08em] text-teal-foreground uppercase"
           >
             {submitting ? (
               <>
@@ -641,6 +649,25 @@ export default function CheckoutClient() {
             payment succeeds.
           </p>
         </aside>
+        <div
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur-md transition-transform duration-200 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden",
+            payInView ? "pointer-events-none translate-y-full" : "translate-y-0",
+          )}
+          aria-hidden={payInView}
+        >
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="h-12 w-full rounded-full bg-teal text-sm font-semibold tracking-[0.08em] text-teal-foreground uppercase"
+          >
+            {submitting
+              ? paying
+                ? "Waiting for payment..."
+                : "Confirming payment..."
+              : `Pay ${formatInr(total)}`}
+          </Button>
+        </div>
       </form>
     </div>
   );

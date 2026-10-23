@@ -7,6 +7,7 @@ import { useCommerce } from "@/components/commerce/CommerceProvider";
 import { useCatalog } from "@/components/site/CatalogProvider";
 import { VariantSelectDialog } from "@/components/site/VariantSelectDialog";
 import { Button } from "@/components/ui/button";
+import { cdnImageUrl } from "@/lib/media";
 import { resolveDirectCartVariant } from "@/lib/product-variants";
 
 export default function WishlistPage() {
@@ -46,7 +47,7 @@ export default function WishlistPage() {
               <article key={item.id} className="rounded-3xl border border-border p-4">
                 <Link href={`/collection/${item.productId}`}>
                   <img
-                    src={item.productImage}
+                    src={cdnImageUrl(item.productImage)}
                     alt={item.productName}
                     className="aspect-[4/5] w-full rounded-2xl object-cover object-top"
                   />

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { listCustomersAdmin, listAllOrders } from "@/lib/commerce.server";
-import { getProducts } from "@/lib/catalog.server";
+import { getAdminProducts } from "@/lib/catalog.server";
 import { listVariantsForProducts } from "@/lib/inventory.server";
 import { LOW_STOCK_THRESHOLD } from "@/lib/inventory";
 
@@ -68,7 +68,7 @@ export async function exportCustomersCsv() {
 }
 
 export async function exportProductsCsv() {
-  const products = await getProducts();
+  const products = await getAdminProducts();
   return toCsv(
     [
       "product_id",
@@ -87,14 +87,14 @@ export async function exportProductsCsv() {
       product.fabric,
       product.price,
       product.compareAtPrice ?? "",
-      product.featured ? "featured" : "active",
+      product.archived ? "archived" : product.featured ? "featured" : "active",
       "",
     ]),
   );
 }
 
 export async function exportInventoryCsv() {
-  const products = await getProducts();
+  const products = await getAdminProducts();
   const variants = await listVariantsForProducts(products.map((row) => row.id));
   const names = new Map(products.map((row) => [row.id, row.name]));
   return toCsv(

@@ -6,7 +6,9 @@ import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { getProducts } from "@/lib/catalog.server";
 import {
   bundleOfferSchema,
+  decodeBundleProductRef,
   displayProductIds,
+  encodeBundleProductRef,
   isBundleOfferActive,
   toBundleOfferView,
   type BundleOffer,
@@ -28,10 +30,12 @@ type BundleRow = {
 };
 
 function mapRow(row: BundleRow): BundleOffer {
+  const decoded = (row.product_ids ?? []).map(decodeBundleProductRef);
   return bundleOfferSchema.parse({
     id: row.id,
     title: row.title,
-    productIds: row.product_ids ?? [],
+    productIds: decoded.map((item) => item.productId),
+    productColors: decoded.map((item) => item.color),
     showOnProductIds: row.show_on_product_ids ?? [],
     pricingType:
       (row as BundleRow & { pricing_type?: string }).pricing_type === "percent"
@@ -53,7 +57,9 @@ function toInsert(offer: BundleOffer) {
   return {
     id: offer.id,
     title: offer.title,
-    product_ids: offer.productIds,
+    product_ids: offer.productIds.map((id, index) =>
+      encodeBundleProductRef(id, offer.productColors[index] ?? ""),
+    ),
     show_on_product_ids: offer.showOnProductIds,
     pricing_type: offer.pricingType ?? "fixed",
     bundle_price: offer.bundlePrice,
@@ -119,11 +125,18 @@ function invalidateBundles() {
 export async function saveBundleOffer(offer: BundleOffer, mode: "create" | "update") {
   const parsed = bundleOfferSchema.parse(offer);
   const products = await getProducts();
-  for (const id of parsed.productIds) {
-    if (!products.some((product) => product.id === id)) {
-      throw new Error(`Unknown product in bundle: ${id}`);
-    }
+  if (parsed.productColors.length && parsed.productColors.length !== parsed.productIds.length) {
+    throw new Error("Choose a colour for each product.");
   }
+  parsed.productIds.forEach((id, index) => {
+    const product = products.find((row) => row.id === id);
+    if (!product) throw new Error(`Unknown product in bundle: ${id}`);
+    const color = parsed.productColors[index]?.trim() ?? "";
+    if (!parsed.productColors.length) return;
+    if (!color || !product.colors.includes(color)) {
+      throw new Error(`Choose a colour for ${product.name}.`);
+    }
+  });
   if (parsed.pricingType === "percent" && parsed.discountPercent < 1) {
     throw new Error("Enter a bundle discount percent.");
   }

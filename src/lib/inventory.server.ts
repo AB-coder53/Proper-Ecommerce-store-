@@ -360,6 +360,65 @@ export async function deductOrderInventory(
   }
 }
 
+export async function listVariantNetDeltas() {
+  return withDb(async () => {
+    const { data, error } = await db()
+      .from("inventory_transactions")
+      .select("variant_id, delta");
+    if (error) throw new Error(error.message);
+    const nets = new Map<string, number>();
+    for (const row of data ?? []) {
+      const id = String((row as { variant_id: string }).variant_id);
+      const delta = Number((row as { delta: number }).delta);
+      nets.set(id, (nets.get(id) ?? 0) + delta);
+    }
+    return nets;
+  });
+}
+
+export async function setAbsoluteVariantStock(input: {
+  productId: string;
+  color: string;
+  size: string;
+  stock: number;
+}) {
+  const stock = Math.max(0, Math.floor(input.stock));
+  const existing = await getVariant(input.productId, input.color, input.size);
+  if (!existing) {
+    const id = randomUUID();
+    const sku = makeVariantSku(input.productId, input.color, input.size);
+    const { error } = await db().from("product_variants").insert({
+      id,
+      product_id: input.productId,
+      color: input.color,
+      size: input.size,
+      sku,
+      stock: 0,
+    });
+    if (error) throw new Error(error.message);
+    if (stock === 0) return { variantId: id, stock: 0 };
+    const created = await applyStockChange({
+      variantId: id,
+      delta: stock,
+      reason: "STOCK_RESTOCK",
+    });
+    if (!created.ok) {
+      throw Object.assign(new Error(created.error ?? "Could not update stock."), { status: 400 });
+    }
+    return { variantId: id, stock: created.stock };
+  }
+  if (existing.stock === stock) return { variantId: existing.id, stock: existing.stock };
+  const result = await applyStockChange({
+    variantId: existing.id,
+    delta: stock - existing.stock,
+    reason: stock > existing.stock ? "STOCK_RESTOCK" : "ADMIN_ADJUSTMENT",
+  });
+  if (!result.ok) {
+    throw Object.assign(new Error(result.error ?? "Could not update stock."), { status: 400 });
+  }
+  return { variantId: existing.id, stock: result.stock };
+}
+
 export async function restoreOrderInventory(
   orderId: string,
   orderNumber: string,

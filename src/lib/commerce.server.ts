@@ -33,8 +33,8 @@ import { formatInr, parsePriceInr } from "@/lib/price";
 import { productImageForColor } from "@/lib/cart-display";
 import { deductOrderInventory, getVariant, restoreOrderInventory } from "@/lib/inventory.server";
 import { RELEASE_ORDER_STATUSES } from "@/lib/inventory";
+import { isListedOrder } from "@/lib/order-tracking";
 import { normalizeMobile } from "@/lib/reservation-utils";
-import { syncPrelaunchLeadsToOrders } from "@/lib/prelaunch-orders.server";
 import { getSupabaseWriteClient } from "@/lib/supabase-catalog.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -443,7 +443,9 @@ export async function upsertCartItem(customerId: string, input: CartItemInput) {
     getProductById(input.productId),
     getCart(customerId),
   ]);
-  if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
+  if (!product || product.archived) {
+    throw Object.assign(new Error("This product is no longer available."), { status: 404 });
+  }
   if (!product.sizes.includes(input.size)) {
     throw Object.assign(new Error("Invalid size for this product."), { status: 400 });
   }
@@ -570,7 +572,9 @@ export async function setCartItemVariant(
   const current = cart.find((line) => line.id === itemId);
   if (!current) throw Object.assign(new Error("Cart item not found."), { status: 404 });
   const product = await getProductById(current.productId);
-  if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
+  if (!product || product.archived) {
+    throw Object.assign(new Error("This product is no longer available."), { status: 404 });
+  }
   if (!product.sizes.includes(size)) {
     throw Object.assign(new Error("This size is currently unavailable."), { status: 400 });
   }
@@ -772,7 +776,9 @@ export async function getWishlist(customerId: string): Promise<WishlistItem[]> {
 
 export async function addWishlistItem(customerId: string, productId: string) {
   const product = await getProductById(productId);
-  if (!product) throw Object.assign(new Error("Product not found."), { status: 404 });
+  if (!product || product.archived) {
+    throw Object.assign(new Error("This product is no longer available."), { status: 404 });
+  }
   const now = new Date().toISOString();
   await withDb(async () => {
     const sb = getCommerceDb();
@@ -921,11 +927,7 @@ async function resolveCheckoutLinesAndTotals(customer: CustomerPublic, input: Ch
       status: 409,
     });
   }
-  const bundleMatch = bestApplicableBundle(
-    await getBundleOffers(),
-    products,
-    lines.map((line) => line.productId),
-  );
+  const bundleMatch = bestApplicableBundle(await getBundleOffers(), products, lines);
   const couponDiscount = couponQuote.ok ? couponQuote.discount : 0;
   const bundleDiscount = bundleMatch?.view.savings ?? 0;
   const discount = couponDiscount + bundleDiscount;
@@ -1254,11 +1256,6 @@ export async function findOrderByNumber(orderNumber: string) {
 }
 
 export async function listAllOrders() {
-  try {
-    await syncPrelaunchLeadsToOrders();
-  } catch (error) {
-    console.error("[prelaunch-import]", error);
-  }
   return queryOrders();
 }
 
@@ -1758,7 +1755,9 @@ export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {
   }
 
   return customers.map((customer) => {
-    const customerOrders = orders.filter((o) => o.customerId === customer.id);
+    const customerOrders = orders.filter(
+      (order) => order.customerId === customer.id && isListedOrder(order),
+    );
     const customerAddresses = addressesByCustomer.get(customer.id) ?? [];
     return {
       id: customer.id,
@@ -1769,7 +1768,10 @@ export async function listCustomersAdmin(): Promise<CustomerAdminRow[]> {
       status: customer.status,
       createdAt: customer.createdAt,
       totalOrders: customerOrders.length,
-      totalSpent: customerOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+      totalSpent: customerOrders.reduce(
+        (sum, order) => sum + (order.paymentStatus === "paid" ? order.totalAmount : 0),
+        0,
+      ),
       defaultAddress: customerAddresses.find((a) => a.isDefault) ?? customerAddresses[0] ?? null,
     };
   });
@@ -1779,7 +1781,7 @@ export async function getCustomerAdmin(customerId: string) {
   const customers = await listCustomersAdmin();
   const customer = customers.find((c) => c.id === customerId) ?? null;
   if (!customer) return null;
-  const orders = await listOrdersForCustomer(customerId);
+  const orders = (await listOrdersForCustomer(customerId)).filter(isListedOrder);
   return { customer, orders };
 }
 

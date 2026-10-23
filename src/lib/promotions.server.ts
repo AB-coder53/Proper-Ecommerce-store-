@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  ARCHIVE_BADGE_ID,
   computeCouponDiscount,
   couponSchema,
   couponStatus,
@@ -80,7 +81,9 @@ export async function listBadges(): Promise<ProductBadge[]> {
       .select("*")
       .order("sort_order", { ascending: true });
     if (error) throw error;
-    return (data ?? []).map((row) => mapBadge(row as Record<string, unknown>));
+    return (data ?? [])
+      .map((row) => mapBadge(row as Record<string, unknown>))
+      .filter((badge) => badge.id !== ARCHIVE_BADGE_ID);
   });
 }
 
@@ -106,6 +109,7 @@ export async function saveBadge(input: ProductBadge, mode: "create" | "update") 
 }
 
 export async function deleteBadge(id: string) {
+  if (id === ARCHIVE_BADGE_ID) throw new Error("This marker cannot be deleted.");
   await withDb(async () => {
     await db().from("product_badge_assignments").delete().eq("badge_id", id);
     const { error } = await db().from("product_badges").delete().eq("id", id);
@@ -124,14 +128,57 @@ export async function listBadgeAssignments() {
   });
 }
 
-export async function setProductBadges(productId: string, badgeIds: string[]) {
-  const unique = [...new Set(badgeIds)];
-  await withDb(async () => {
-    await db().from("product_badge_assignments").delete().eq("product_id", productId);
-    if (!unique.length) return;
+async function ensureArchiveBadge() {
+  const { error } = await db().from("product_badges").upsert(
+    {
+      id: ARCHIVE_BADGE_ID,
+      name: "Archived",
+      label: "Archived",
+      active: false,
+      sort_order: 9999,
+      tone: "default",
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function setProductArchiveFlag(productId: string, archived: boolean) {
+  await ensureArchiveBadge();
+  if (archived) {
     const { error } = await db()
       .from("product_badge_assignments")
-      .insert(unique.map((badgeId) => ({ product_id: productId, badge_id: badgeId })));
+      .upsert(
+        { product_id: productId, badge_id: ARCHIVE_BADGE_ID },
+        { onConflict: "product_id,badge_id" },
+      );
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await db()
+    .from("product_badge_assignments")
+    .delete()
+    .eq("product_id", productId)
+    .eq("badge_id", ARCHIVE_BADGE_ID);
+  if (error) throw new Error(error.message);
+}
+
+export async function setProductBadges(productId: string, badgeIds: string[]) {
+  const unique = [...new Set(badgeIds.filter((id) => id !== ARCHIVE_BADGE_ID))];
+  await withDb(async () => {
+    const existing = await db()
+      .from("product_badge_assignments")
+      .select("badge_id")
+      .eq("product_id", productId)
+      .eq("badge_id", ARCHIVE_BADGE_ID);
+    if (existing.error) throw new Error(existing.error.message);
+    const keepArchived = (existing.data ?? []).length > 0;
+    await db().from("product_badge_assignments").delete().eq("product_id", productId);
+    const next = keepArchived ? [...unique, ARCHIVE_BADGE_ID] : unique;
+    if (!next.length) return;
+    const { error } = await db()
+      .from("product_badge_assignments")
+      .insert(next.map((badgeId) => ({ product_id: productId, badge_id: badgeId })));
     if (error) throw new Error(error.message);
   });
 }
