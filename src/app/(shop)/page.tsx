@@ -25,7 +25,7 @@ export default async function HomePage() {
     <>
       <JsonLd data={breadcrumbJsonLd([{ name: "Home", path: "/" }])} />
       <HomeHero products={catalog.products} />
-      <HomeDiscover collections={catalog.collections} />
+      {catalog.collections.length ? <HomeDiscover collections={catalog.collections} /> : null}
       <HomeFeatured products={catalog.products} />
       <HomeCommunity products={catalog.products} />
     </>

@@ -92,6 +92,8 @@ export function HomeHero({ products }: { products: Product[] }) {
 }
 
 export function HomeDiscover({ collections }: { collections: Collection[] }) {
+  if (!collections.length) return null;
+
   return (
     <section className="bg-sand px-5 py-16 sm:px-8 sm:py-28" aria-labelledby="discover-heading">
       <Reveal>
