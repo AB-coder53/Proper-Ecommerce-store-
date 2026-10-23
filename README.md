@@ -6,7 +6,7 @@ Premium pre-launch landing page for AB Collection, built with Next.js.
 
 ## Development
 
-```sh
+
 npm install
 npm run dev
 ```
