@@ -79,7 +79,7 @@ export function HomeHero({ products }: { products: Product[] }) {
                     height={1440}
                     sizes="(max-width: 640px) 40vw, 448px"
                     priority={index < 3}
-                    className="block aspect-[2/3] h-auto w-full scale-[1.06] object-cover object-top"
+                    className="block aspect-[2/3] h-auto w-full object-cover object-top sm:scale-[1.06]"
                   />
                 </div>
               </div>
@@ -116,7 +116,7 @@ export function HomeDiscover({ collections }: { collections: Collection[] }) {
                     width={1200}
                     height={1500}
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    className="aspect-[4/5] w-full object-cover object-top transition-transform duration-700 hover:scale-105"
+                    className="aspect-[4/5] w-full object-cover object-top sm:transition-transform sm:duration-700 sm:hover:scale-105"
                   />
                 </Link>
                 <Button

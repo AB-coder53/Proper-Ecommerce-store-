@@ -15,10 +15,13 @@ const supabaseHost = supabaseHostname();
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   images: {
+    // Hobby includes 5,000 image transformations. Each product photo and size
+    // counts, which paused the project at 5.9K. Photos are served from Supabase.
+    unoptimized: true,
     formats: ["image/avif", "image/webp"],
     qualities: [75, 90, 95],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1440, 1920, 2048, 2560],
-    imageSizes: [64, 80, 96, 128, 160, 256, 384, 512],
+    deviceSizes: [640, 828, 1080, 1200],
+    imageSizes: [64, 96, 128, 256, 384],
     remotePatterns: [
       ...(supabaseHost
         ? [

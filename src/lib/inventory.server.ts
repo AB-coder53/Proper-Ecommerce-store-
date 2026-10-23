@@ -102,6 +102,53 @@ export async function getVariant(productId: string, color: string, size: string)
   );
 }
 
+function isMissingVariantColumn(message: string) {
+  return /variant_id/i.test(message) && /does not exist|could not find the/i.test(message);
+}
+
+/** Remove rows that reference a variant so the variant itself can be deleted. */
+async function detachVariant(sb: SupabaseClient, variantId: string) {
+  const { error: orderError } = await sb
+    .from("order_items")
+    .update({ variant_id: null })
+    .eq("variant_id", variantId);
+  if (orderError && !isMissingVariantColumn(orderError.message)) {
+    throw new Error(orderError.message);
+  }
+
+  const { error: historyError } = await sb
+    .from("inventory_transactions")
+    .delete()
+    .eq("variant_id", variantId);
+  if (historyError) throw new Error(historyError.message);
+}
+
+/** Drop stock-history rows that would block deleting this product's variants. */
+export async function clearInventoryHistory(productId: string) {
+  return withDb(async () => {
+    const sb = db();
+    const { data, error } = await sb
+      .from("product_variants")
+      .select("id")
+      .eq("product_id", productId);
+    if (error) throw new Error(error.message);
+
+    const variantIds = (data ?? [])
+      .map((row) => String((row as { id?: unknown }).id ?? ""))
+      .filter(Boolean);
+
+    for (const variantId of variantIds) {
+      await detachVariant(sb, variantId);
+    }
+
+    const { error: byProduct } = await sb
+      .from("inventory_transactions")
+      .delete()
+      .eq("product_id", productId);
+    if (byProduct) throw new Error(byProduct.message);
+  });
+}
+
 export async function syncProductVariants(product: Product) {
   const colors = product.colors.map((row) => row.trim()).filter(Boolean);
   const sizes = product.sizes.map((row) => row.trim()).filter(Boolean);
@@ -122,15 +169,18 @@ export async function syncProductVariants(product: Product) {
       .eq("product_id", product.id);
     if (error) throw new Error(error.message);
     const current = (existing ?? []).map((row) => mapVariant(row as Record<string, unknown>));
-    const keep = new Set(wanted.map((row) => colorSizeKey(row.color, row.size)));
+    const keptIds = new Set<string>();
 
     for (const next of wanted) {
       const found =
-        current.find((row) => row.sku === next.sku) ??
+        current.find((row) => !keptIds.has(row.id) && row.sku === next.sku) ??
         current.find(
-          (row) => colorSizeKey(row.color, row.size) === colorSizeKey(next.color, next.size),
+          (row) =>
+            !keptIds.has(row.id) &&
+            colorSizeKey(row.color, row.size) === colorSizeKey(next.color, next.size),
         );
       if (found) {
+        keptIds.add(found.id);
         if (found.color !== next.color || found.size !== next.size || found.sku !== next.sku) {
           const { error: renameError } = await sb
             .from("product_variants")
@@ -159,14 +209,16 @@ export async function syncProductVariants(product: Product) {
         }
         found.stock = next.stock;
       } else {
+        const id = randomUUID();
         const { error: insertError } = await sb.from("product_variants").insert({
-          id: randomUUID(),
+          id,
           product_id: product.id,
           color: next.color,
           size: next.size,
           sku: next.sku,
           stock: next.stock,
         });
+        if (!insertError) keptIds.add(id);
         if (insertError) {
           if (insertError.code !== "23505") throw new Error(insertError.message);
           const { data: conflict, error: conflictError } = await sb
@@ -177,6 +229,7 @@ export async function syncProductVariants(product: Product) {
             .maybeSingle();
           if (conflictError || !conflict) throw new Error(insertError.message);
           const mapped = mapVariant(conflict as Record<string, unknown>);
+          keptIds.add(mapped.id);
           const { error: renameError } = await sb
             .from("product_variants")
             .update({
@@ -204,14 +257,10 @@ export async function syncProductVariants(product: Product) {
     }
 
     for (const row of current) {
-      if (keep.has(colorSizeKey(row.color, row.size))) continue;
-      if (row.stock !== 0) {
-        const { error: zeroError } = await sb
-          .from("product_variants")
-          .update({ stock: 0, updated_at: new Date().toISOString() })
-          .eq("id", row.id);
-        if (zeroError) throw new Error(zeroError.message);
-      }
+      if (keptIds.has(row.id)) continue;
+      await detachVariant(sb, row.id);
+      const { error: removeError } = await sb.from("product_variants").delete().eq("id", row.id);
+      if (removeError) throw new Error(removeError.message);
     }
   });
 }

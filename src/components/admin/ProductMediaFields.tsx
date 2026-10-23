@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Loader2, Plus, Star, Trash2, Upload } from "lucide-react";
 
-import { uploadAdminImage } from "@/components/admin/AdminFields";
+import { assertProductPhotoIsSharp, uploadAdminImage } from "@/components/admin/AdminFields";
 import { ColorCombobox } from "@/components/admin/ColorCombobox";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,6 +99,7 @@ export function ProductMediaFields({
               COLOR_IMAGE_LIMIT - (rows.find((row) => row.key === target)?.images.length ?? 0),
             );
       for (const file of files.slice(0, Math.max(0, room))) {
+        await assertProductPhotoIsSharp(file);
         urls.push(await uploadAdminImage(file));
       }
       if (!urls.length) {

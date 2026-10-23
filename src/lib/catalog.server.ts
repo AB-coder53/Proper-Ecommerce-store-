@@ -5,7 +5,11 @@ import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 
 import type { Database } from "@/integrations/supabase/types";
 import type { Catalog, Collection, Product } from "@/lib/catalog-types";
-import { attachInventory, syncProductVariants } from "@/lib/inventory.server";
+import {
+  attachInventory,
+  clearInventoryHistory,
+  syncProductVariants,
+} from "@/lib/inventory.server";
 import { parsePriceInr } from "@/lib/price";
 import { attachStoredColorImages, writeStoredColorImages } from "@/lib/color-images.server";
 import { resolveMediaUrl, resolveMediaUrls } from "@/lib/media";
@@ -220,6 +224,7 @@ export async function deleteProduct(id: string) {
 
   const supabase = getSupabaseWriteClient();
   await supabase.from("collections").update({ product_id: null }).eq("product_id", id);
+  await clearInventoryHistory(id);
   const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) throw new Error(error.message);
   invalidateCatalogCache();
