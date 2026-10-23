@@ -142,7 +142,7 @@ export function ProductDetail({
             height={2250}
             sizes="(max-width: 1024px) 100vw, 56vw"
             priority={heroPrioritySrc.current === activeImage}
-            className="h-[30svh] w-full object-cover object-top transition-opacity duration-300 sm:h-[46svh] lg:aspect-[4/5] lg:h-auto"
+            className="h-auto w-full object-contain"
           />
           {visibleIndexes.length > 1 ? (
             <>
